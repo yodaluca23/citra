@@ -8,7 +8,6 @@
 #include "common/settings.h"
 #include "core/core.h"
 #include "core/gdbstub/gdbstub.h"
-#include "core/hle/kernel/shared_page.h"
 #include "core/hle/service/cam/cam.h"
 #include "core/hle/service/hid/hid.h"
 #include "core/hle/service/ir/ir_rst.h"
@@ -95,7 +94,7 @@ void LogSettings() {
     LOG_INFO(Config, "Citra Configuration:");
     log_setting("Core_UseCpuJit", values.use_cpu_jit.GetValue());
     log_setting("Core_CPUClockPercentage", values.cpu_clock_percentage.GetValue());
-    log_setting("Renderer_UseGLES", values.use_gles.GetValue());
+    log_setting("Renderer_GraphicsAPI", values.graphics_api.GetValue());
     log_setting("Renderer_UseHwRenderer", values.use_hw_renderer.GetValue());
     log_setting("Renderer_UseHwShader", values.use_hw_shader.GetValue());
     log_setting("Renderer_SeparableShader", values.separable_shader.GetValue());

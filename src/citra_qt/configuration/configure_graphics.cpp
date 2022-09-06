@@ -19,9 +19,10 @@ ConfigureGraphics::ConfigureGraphics(QWidget* parent)
     SetupPerGameUI();
     SetConfiguration();
 
-    ui->hw_renderer_group->setEnabled(ui->hw_renderer_group->isEnabled() &&
-                                      ui->toggle_hw_renderer->isChecked());
-    ui->toggle_vsync_new->setEnabled(!Core::System::GetInstance().IsPoweredOn());
+    const bool not_running = !Core::System::GetInstance().IsPoweredOn();
+    ui->hw_renderer_group->setEnabled(ui->toggle_hw_renderer->isChecked());
+    ui->toggle_vsync_new->setEnabled(not_running);
+    ui->graphics_api_combo->setEnabled(not_running);
 
     connect(ui->toggle_hw_renderer, &QCheckBox::toggled, this, [this] {
         const bool checked = ui->toggle_hw_renderer->isChecked();

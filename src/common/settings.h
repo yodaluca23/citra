@@ -15,6 +15,12 @@
 
 namespace Settings {
 
+enum class GraphicsAPI {
+    OpenGL = 0,
+    OpenGLES = 1,
+    Vulkan = 2,
+};
+
 enum class InitClock : u32 {
     SystemTime = 0,
     FixedTime = 1,
@@ -440,7 +446,7 @@ struct Values {
     Setting<bool> allow_plugin_loader{true, "allow_plugin_loader"};
 
     // Renderer
-    Setting<bool> use_gles{false, "use_gles"};
+    SwitchableSetting<GraphicsAPI> graphics_api{GraphicsAPI::OpenGL, "graphics_api"};
     SwitchableSetting<bool> use_hw_renderer{true, "use_hw_renderer"};
     SwitchableSetting<bool> use_hw_shader{true, "use_hw_shader"};
     SwitchableSetting<bool> separable_shader{false, "use_separable_shader"};
