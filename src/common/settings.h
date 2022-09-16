@@ -446,7 +446,7 @@ struct Values {
     Setting<bool> allow_plugin_loader{true, "allow_plugin_loader"};
 
     // Renderer
-    SwitchableSetting<GraphicsAPI> graphics_api{GraphicsAPI::OpenGL, "graphics_api"};
+    SwitchableSetting<GraphicsAPI> graphics_api{GraphicsAPI::Vulkan, "graphics_api"};
     SwitchableSetting<bool> use_hw_renderer{true, "use_hw_renderer"};
     SwitchableSetting<bool> use_hw_shader{true, "use_hw_shader"};
     SwitchableSetting<bool> separable_shader{false, "use_separable_shader"};
