@@ -601,6 +601,7 @@ void Config::ReadPathValues() {
 void Config::ReadRendererValues() {
     qt_config->beginGroup(QStringLiteral("Renderer"));
 
+    ReadGlobalSetting(Settings::values.graphics_api);
     ReadGlobalSetting(Settings::values.use_hw_renderer);
     ReadGlobalSetting(Settings::values.use_hw_shader);
 #ifdef __APPLE__
@@ -622,6 +623,7 @@ void Config::ReadRendererValues() {
     ReadGlobalSetting(Settings::values.texture_filter_name);
 
     if (global) {
+        ReadBasicSetting(Settings::values.renderer_debug);
         ReadBasicSetting(Settings::values.use_shader_jit);
     }
 
@@ -1077,6 +1079,7 @@ void Config::SavePathValues() {
 void Config::SaveRendererValues() {
     qt_config->beginGroup(QStringLiteral("Renderer"));
 
+    WriteGlobalSetting(Settings::values.graphics_api);
     WriteGlobalSetting(Settings::values.use_hw_renderer);
     WriteGlobalSetting(Settings::values.use_hw_shader);
 #ifdef __APPLE__
@@ -1097,6 +1100,7 @@ void Config::SaveRendererValues() {
     WriteGlobalSetting(Settings::values.texture_filter_name);
 
     if (global) {
+        WriteBasicSetting(Settings::values.renderer_debug);
         WriteSetting(QStringLiteral("use_shader_jit"), Settings::values.use_shader_jit.GetValue(),
                      true);
     }

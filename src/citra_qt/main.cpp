@@ -59,10 +59,7 @@
 #include "common/file_util.h"
 #include "common/literals.h"
 #include "common/logging/backend.h"
-#include "common/logging/filter.h"
 #include "common/logging/log.h"
-#include "common/logging/text_formatter.h"
-#include "common/memory_detect.h"
 #include "common/microprofile.h"
 #include "common/scm_rev.h"
 #include "common/scope_exit.h"
@@ -76,7 +73,6 @@
 #include "core/file_sys/archive_extsavedata.h"
 #include "core/file_sys/archive_source_sd_savedata.h"
 #include "core/frontend/applets/default_applets.h"
-#include "core/gdbstub/gdbstub.h"
 #include "core/hle/service/fs/archive.h"
 #include "core/hle/service/nfc/nfc.h"
 #include "core/loader/loader.h"
@@ -86,7 +82,6 @@
 #include "input_common/main.h"
 #include "network/network_settings.h"
 #include "ui_main.h"
-#include "video_core/renderer_base.h"
 #include "video_core/video_core.h"
 
 #ifdef __APPLE__
