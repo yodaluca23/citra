@@ -299,6 +299,23 @@ void GMainWindow::InitializeWidgets() {
     message_label->setAlignment(Qt::AlignLeft);
     statusBar()->addPermanentWidget(message_label, 1);
 
+    // Setup Graphics API button
+    graphics_api_button = new QPushButton();
+    graphics_api_button->setCheckable(true);
+    graphics_api_button->setObjectName(QStringLiteral("GraphicsAPIStatusBarButton"));
+    graphics_api_button->setFocusPolicy(Qt::NoFocus);
+    UpdateAPIIndicator(false);
+
+    connect(graphics_api_button, &QPushButton::clicked, this, [this] {
+        if (emulation_running) {
+            return;
+        }
+
+        UpdateAPIIndicator(true);
+    });
+
+    statusBar()->addPermanentWidget(graphics_api_button);
+
     progress_bar = new QProgressBar();
     progress_bar->hide();
     statusBar()->addPermanentWidget(progress_bar);
@@ -318,8 +335,9 @@ void GMainWindow::InitializeWidgets() {
         label->setVisible(false);
         label->setFrameStyle(QFrame::NoFrame);
         label->setContentsMargins(4, 0, 4, 0);
-        statusBar()->addPermanentWidget(label, 0);
+        statusBar()->addPermanentWidget(label);
     }
+
     statusBar()->addPermanentWidget(multiplayer_state->GetStatusText(), 0);
     statusBar()->addPermanentWidget(multiplayer_state->GetStatusIcon(), 0);
     statusBar()->setVisible(true);
@@ -1919,6 +1937,7 @@ void GMainWindow::OnConfigure() {
             setMouseTracking(false);
         }
         UpdateSecondaryWindowVisibility();
+        UpdateAPIIndicator(false);
     } else {
         Settings::values.input_profiles = old_input_profiles;
         Settings::values.touch_from_button_maps = old_touch_from_button_maps;
@@ -2228,6 +2247,33 @@ void GMainWindow::ShowMouseCursor() {
     if (emu_thread != nullptr && UISettings::values.hide_mouse) {
         mouse_hide_timer.start();
     }
+}
+
+void GMainWindow::UpdateAPIIndicator(bool override) {
+    static std::array graphics_apis = {
+        QStringLiteral("OPENGL"),
+        QStringLiteral("OPENGLES"),
+        QStringLiteral("VULKAN")
+    };
+
+    static std::array graphics_api_colors = {
+        QStringLiteral("#00ccdd"),
+        QStringLiteral("#ba2a8d"),
+        QStringLiteral("#91242a")
+    };
+
+    u32 api_index = static_cast<u32>(Settings::values.graphics_api);
+    if (override) {
+        api_index = (api_index + 1) % graphics_apis.size();
+        Settings::values.graphics_api =
+                static_cast<Settings::GraphicsAPI>(api_index);
+    }
+
+    const QString style_sheet =
+            QStringLiteral("QPushButton { font-weight: bold; color: %0; }").arg(graphics_api_colors[api_index]);
+
+    graphics_api_button->setText(graphics_apis[api_index]);
+    graphics_api_button->setStyleSheet(style_sheet);
 }
 
 void GMainWindow::OnMouseActivity() {

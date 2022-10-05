@@ -11,11 +11,13 @@
 #include "common/settings.h"
 #include "core/core.h"
 #include "ui_configure_graphics.h"
+#include "video_core/renderer_vulkan/vk_instance.h"
 
 ConfigureGraphics::ConfigureGraphics(QWidget* parent)
     : QWidget(parent), ui(std::make_unique<Ui::ConfigureGraphics>()) {
     ui->setupUi(this);
 
+    DiscoverPhysicalDevices();
     SetupPerGameUI();
     SetConfiguration();
 
@@ -27,6 +29,10 @@ ConfigureGraphics::ConfigureGraphics(QWidget* parent)
     ui->graphics_api_combo->setEnabled(not_running);
     ui->toggle_shader_jit->setEnabled(not_running);
     ui->toggle_disk_shader_cache->setEnabled(hw_renderer_enabled && not_running);
+    SetPhysicalDeviceComboVisibility(ui->graphics_api_combo->currentIndex());
+
+    connect(ui->graphics_api_combo, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            &ConfigureGraphics::SetPhysicalDeviceComboVisibility);
 
     connect(ui->toggle_hw_renderer, &QCheckBox::toggled, this, [this] {
         const bool checked = ui->toggle_hw_renderer->isChecked();
@@ -77,6 +83,7 @@ void ConfigureGraphics::SetConfiguration() {
     ui->toggle_disk_shader_cache->setChecked(Settings::values.use_disk_shader_cache.GetValue());
     ui->toggle_vsync_new->setChecked(Settings::values.use_vsync_new.GetValue());
     ui->graphics_api_combo->setCurrentIndex(static_cast<int>(Settings::values.graphics_api.GetValue()));
+    ui->physical_device_combo->setCurrentIndex(static_cast<int>(Settings::values.physical_device.GetValue()));
 
     if (Settings::IsConfiguringGlobal()) {
         ui->toggle_shader_jit->setChecked(Settings::values.use_shader_jit.GetValue());
@@ -97,6 +104,7 @@ void ConfigureGraphics::ApplyConfiguration() {
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.use_vsync_new, ui->toggle_vsync_new,
                                              use_vsync_new);
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.graphics_api, ui->graphics_api_combo);
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.physical_device, ui->physical_device_combo);
 
     if (Settings::IsConfiguringGlobal()) {
         Settings::values.use_shader_jit = ui->toggle_shader_jit->isChecked();
@@ -135,4 +143,22 @@ void ConfigureGraphics::SetupPerGameUI() {
                                             use_disk_shader_cache);
     ConfigurationShared::SetColoredTristate(ui->toggle_vsync_new, Settings::values.use_vsync_new,
                                             use_vsync_new);
+}
+
+void ConfigureGraphics::DiscoverPhysicalDevices() {
+    Vulkan::Instance instance{};
+    const auto physical_devices = instance.GetPhysicalDevices();
+
+    ui->physical_device_combo->clear();
+    for (const vk::PhysicalDevice& physical_device : physical_devices) {
+        const QString name = QString::fromLocal8Bit(physical_device.getProperties().deviceName);
+        ui->physical_device_combo->addItem(name);
+    }
+}
+
+void ConfigureGraphics::SetPhysicalDeviceComboVisibility(int index) {
+    const auto graphics_api = static_cast<Settings::GraphicsAPI>(index);
+    const bool is_visible = graphics_api == Settings::GraphicsAPI::Vulkan;
+    ui->physical_device_label->setVisible(is_visible);
+    ui->physical_device_combo->setVisible(is_visible);
 }

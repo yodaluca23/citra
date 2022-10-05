@@ -447,6 +447,7 @@ struct Values {
 
     // Renderer
     SwitchableSetting<GraphicsAPI> graphics_api{GraphicsAPI::OpenGL, "graphics_api"};
+    SwitchableSetting<u16> physical_device{0, "physical_device"};
     Setting<bool> renderer_debug{false, "renderer_debug"};
     SwitchableSetting<bool> use_hw_renderer{true, "use_hw_renderer"};
     SwitchableSetting<bool> use_hw_shader{true, "use_hw_shader"};

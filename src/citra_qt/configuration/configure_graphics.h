@@ -30,6 +30,10 @@ public:
 
     void SetupPerGameUI();
 
+private:
+    void DiscoverPhysicalDevices();
+    void SetPhysicalDeviceComboVisibility(int index);
+
     ConfigurationShared::CheckState use_hw_renderer;
     ConfigurationShared::CheckState use_hw_shader;
     ConfigurationShared::CheckState separable_shader;
