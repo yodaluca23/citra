@@ -19,6 +19,17 @@
 
 namespace Settings {
 
+[[nodiscard]] std::string_view GetAPIName(GraphicsAPI api) {
+    switch (api) {
+    case GraphicsAPI::OpenGL:
+        return "OpenGL";
+    case GraphicsAPI::OpenGLES:
+        return "OpenGLES";
+    case GraphicsAPI::Vulkan:
+        return "Vulkan";
+    }
+}
+
 Values values = {};
 static bool configuring_global = true;
 
@@ -94,7 +105,7 @@ void LogSettings() {
     LOG_INFO(Config, "Citra Configuration:");
     log_setting("Core_UseCpuJit", values.use_cpu_jit.GetValue());
     log_setting("Core_CPUClockPercentage", values.cpu_clock_percentage.GetValue());
-    log_setting("Renderer_GraphicsAPI", values.graphics_api.GetValue());
+    log_setting("Renderer_GraphicsAPI", GetAPIName(values.graphics_api.GetValue()));
     log_setting("Renderer_UseHwRenderer", values.use_hw_renderer.GetValue());
     log_setting("Renderer_UseHwShader", values.use_hw_shader.GetValue());
     log_setting("Renderer_SeparableShader", values.separable_shader.GetValue());
