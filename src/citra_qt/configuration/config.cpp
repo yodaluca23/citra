@@ -455,6 +455,8 @@ void Config::ReadDebuggingValues() {
         qt_config->value(QStringLiteral("record_frame_times"), false).toBool();
     ReadBasicSetting(Settings::values.use_gdbstub);
     ReadBasicSetting(Settings::values.gdbstub_port);
+    ReadBasicSetting(Settings::values.renderer_debug);
+    ReadBasicSetting(Settings::values.dump_command_buffers);
 
     qt_config->beginGroup(QStringLiteral("LLE"));
     for (const auto& service_module : Service::service_module_map) {
@@ -624,7 +626,6 @@ void Config::ReadRendererValues() {
     ReadGlobalSetting(Settings::values.texture_filter_name);
 
     if (global) {
-        ReadBasicSetting(Settings::values.renderer_debug);
         ReadBasicSetting(Settings::values.use_shader_jit);
     }
 
@@ -968,6 +969,8 @@ void Config::SaveDebuggingValues() {
     qt_config->setValue(QStringLiteral("record_frame_times"), Settings::values.record_frame_times);
     WriteBasicSetting(Settings::values.use_gdbstub);
     WriteBasicSetting(Settings::values.gdbstub_port);
+    WriteBasicSetting(Settings::values.renderer_debug);
+    WriteBasicSetting(Settings::values.dump_command_buffers);
 
     qt_config->beginGroup(QStringLiteral("LLE"));
     for (const auto& service_module : Settings::values.lle_modules) {
@@ -1102,7 +1105,6 @@ void Config::SaveRendererValues() {
     WriteGlobalSetting(Settings::values.texture_filter_name);
 
     if (global) {
-        WriteBasicSetting(Settings::values.renderer_debug);
         WriteSetting(QStringLiteral("use_shader_jit"), Settings::values.use_shader_jit.GetValue(),
                      true);
     }
