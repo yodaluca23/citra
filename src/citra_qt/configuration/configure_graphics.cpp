@@ -85,6 +85,7 @@ void ConfigureGraphics::SetConfiguration() {
     ui->toggle_vsync_new->setChecked(Settings::values.use_vsync_new.GetValue());
     ui->graphics_api_combo->setCurrentIndex(static_cast<int>(Settings::values.graphics_api.GetValue()));
     ui->physical_device_combo->setCurrentIndex(static_cast<int>(Settings::values.physical_device.GetValue()));
+    ui->toggle_async_recording->setChecked(Settings::values.async_command_recording.GetValue());
 
     if (Settings::IsConfiguringGlobal()) {
         ui->toggle_shader_jit->setChecked(Settings::values.use_shader_jit.GetValue());
@@ -106,6 +107,8 @@ void ConfigureGraphics::ApplyConfiguration() {
                                              use_vsync_new);
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.graphics_api, ui->graphics_api_combo);
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.physical_device, ui->physical_device_combo);
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.async_command_recording, ui->toggle_async_recording,
+                                             async_command_recording);
 
     if (Settings::IsConfiguringGlobal()) {
         Settings::values.use_shader_jit = ui->toggle_shader_jit->isChecked();

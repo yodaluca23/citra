@@ -40,6 +40,7 @@ private:
     ConfigurationShared::CheckState shaders_accurate_mul;
     ConfigurationShared::CheckState use_disk_shader_cache;
     ConfigurationShared::CheckState use_vsync_new;
+    ConfigurationShared::CheckState async_command_recording;
     std::unique_ptr<Ui::ConfigureGraphics> ui;
     QColor bg_color;
 };

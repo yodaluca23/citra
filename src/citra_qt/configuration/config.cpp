@@ -604,6 +604,7 @@ void Config::ReadRendererValues() {
     qt_config->beginGroup(QStringLiteral("Renderer"));
 
     ReadGlobalSetting(Settings::values.physical_device);
+    ReadGlobalSetting(Settings::values.async_command_recording);
     ReadGlobalSetting(Settings::values.graphics_api);
     ReadGlobalSetting(Settings::values.use_hw_renderer);
     ReadGlobalSetting(Settings::values.use_hw_shader);
@@ -1085,6 +1086,7 @@ void Config::SaveRendererValues() {
 
     WriteGlobalSetting(Settings::values.graphics_api);
     WriteGlobalSetting(Settings::values.physical_device);
+    WriteGlobalSetting(Settings::values.async_command_recording);
     WriteGlobalSetting(Settings::values.use_hw_renderer);
     WriteGlobalSetting(Settings::values.use_hw_shader);
 #ifdef __APPLE__
