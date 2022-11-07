@@ -448,6 +448,7 @@ struct Values {
     // Renderer
     SwitchableSetting<GraphicsAPI> graphics_api{GraphicsAPI::OpenGL, "graphics_api"};
     SwitchableSetting<u16> physical_device{0, "physical_device"};
+    SwitchableSetting<bool> spirv_shader_gen{true, "spirv_shader_gen"};
     Setting<bool> renderer_debug{false, "renderer_debug"};
     Setting<bool> dump_command_buffers{false, "dump_command_buffers"};
     SwitchableSetting<bool> async_command_recording{true, "async_command_recording"};

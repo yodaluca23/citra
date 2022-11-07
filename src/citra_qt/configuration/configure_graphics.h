@@ -41,6 +41,7 @@ private:
     ConfigurationShared::CheckState use_disk_shader_cache;
     ConfigurationShared::CheckState use_vsync_new;
     ConfigurationShared::CheckState async_command_recording;
+    ConfigurationShared::CheckState spirv_shader_gen;
     std::unique_ptr<Ui::ConfigureGraphics> ui;
     QColor bg_color;
 };
