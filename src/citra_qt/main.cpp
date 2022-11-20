@@ -60,6 +60,7 @@
 #include "common/literals.h"
 #include "common/logging/backend.h"
 #include "common/logging/log.h"
+#include "common/memory_detect.h"
 #include "common/microprofile.h"
 #include "common/scm_rev.h"
 #include "common/scope_exit.h"
