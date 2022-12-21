@@ -29,6 +29,7 @@ add_library(video_core STATIC
     renderer_base.cpp
     renderer_base.h
     rasterizer_cache/morton_swizzle.h
+    rasterizer_cache/pixel_format.cpp
     rasterizer_cache/pixel_format.h
     rasterizer_cache/rasterizer_cache.cpp
     rasterizer_cache/rasterizer_cache.h
@@ -41,6 +42,8 @@ add_library(video_core STATIC
     renderer_opengl/frame_dumper_opengl.h
     renderer_opengl/gl_driver.cpp
     renderer_opengl/gl_driver.h
+    renderer_opengl/gl_format_reinterpreter.cpp
+    renderer_opengl/gl_format_reinterpreter.h
     renderer_opengl/gl_rasterizer.cpp
     renderer_opengl/gl_rasterizer.h
     renderer_opengl/gl_resource_manager.cpp
@@ -68,8 +71,6 @@ add_library(video_core STATIC
     renderer_opengl/post_processing_opengl.h
     renderer_opengl/renderer_opengl.cpp
     renderer_opengl/renderer_opengl.h
-    renderer_opengl/texture_downloader_es.cpp
-    renderer_opengl/texture_downloader_es.h
     renderer_opengl/texture_filters/anime4k/anime4k_ultrafast.cpp
     renderer_opengl/texture_filters/anime4k/anime4k_ultrafast.h
     renderer_opengl/texture_filters/bicubic/bicubic.cpp
@@ -83,9 +84,6 @@ add_library(video_core STATIC
     renderer_opengl/texture_filters/texture_filterer.h
     renderer_opengl/texture_filters/xbrz/xbrz_freescale.cpp
     renderer_opengl/texture_filters/xbrz/xbrz_freescale.h
-    #temporary, move these back in alphabetical order before merging
-    renderer_opengl/gl_format_reinterpreter.cpp
-    renderer_opengl/gl_format_reinterpreter.h
     renderer_vulkan/pica_to_vk.h
     renderer_vulkan/renderer_vulkan.cpp
     renderer_vulkan/renderer_vulkan.h
