@@ -148,7 +148,7 @@ public:
 
         // disable vsync for any shared contexts
         auto format = share_context->format();
-        format.setSwapInterval(main_surface ? Settings::values.use_vsync_new : 0);
+        format.setSwapInterval(main_surface ? Settings::values.use_vsync_new.GetValue() : 0);
 
         context = std::make_unique<QOpenGLContext>();
         context->setShareContext(share_context);
@@ -281,8 +281,8 @@ private:
 
 class OpenGLRenderWidget : public RenderWidget {
 public:
-    explicit OpenGLRenderWidget(GRenderWindow* parent, bool is_secondary) :
-        RenderWidget(parent), is_secondary(is_secondary) {
+    explicit OpenGLRenderWidget(GRenderWindow* parent, bool is_secondary)
+        : RenderWidget(parent), is_secondary(is_secondary) {
         windowHandle()->setSurfaceType(QWindow::OpenGLSurface);
     }
 
@@ -341,7 +341,9 @@ static Frontend::EmuWindow::WindowSystemInfo GetWindowSystemInfo(QWindow* window
 #if defined(WIN32)
     wsi.render_surface = window ? reinterpret_cast<void*>(window->winId()) : nullptr;
 #elif defined(__APPLE__)
-    wsi.render_surface = window ? AppleSurfaceHelper::GetSurfaceLayer(reinterpret_cast<void*>(window->winId())) : nullptr;
+    wsi.render_surface =
+        window ? AppleSurfaceHelper::GetSurfaceLayer(reinterpret_cast<void*>(window->winId()))
+               : nullptr;
 #else
     QPlatformNativeInterface* pni = QGuiApplication::platformNativeInterface();
     wsi.display_connection = pni->nativeResourceForWindow("display", window);
@@ -552,7 +554,7 @@ void GRenderWindow::resizeEvent(QResizeEvent* event) {
 }
 
 std::unique_ptr<Frontend::GraphicsContext> GRenderWindow::CreateSharedContext() const {
-    const Settings::GraphicsAPI graphics_api = Settings::values.graphics_api;
+    const Settings::GraphicsAPI graphics_api = Settings::values.graphics_api.GetValue();
     if (graphics_api == Settings::GraphicsAPI::OpenGL ||
         graphics_api == Settings::GraphicsAPI::OpenGLES) {
         auto c = static_cast<OpenGLSharedContext*>(main_context.get());
@@ -576,7 +578,7 @@ bool GRenderWindow::InitRenderTarget() {
 
     first_frame = false;
 
-    const Settings::GraphicsAPI graphics_api = Settings::values.graphics_api;
+    const Settings::GraphicsAPI graphics_api = Settings::values.graphics_api.GetValue();
     switch (graphics_api) {
     case Settings::GraphicsAPI::OpenGL:
     case Settings::GraphicsAPI::OpenGLES:

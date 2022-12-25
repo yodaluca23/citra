@@ -83,8 +83,10 @@ void ConfigureGraphics::SetConfiguration() {
     ui->toggle_accurate_mul->setChecked(Settings::values.shaders_accurate_mul.GetValue());
     ui->toggle_disk_shader_cache->setChecked(Settings::values.use_disk_shader_cache.GetValue());
     ui->toggle_vsync_new->setChecked(Settings::values.use_vsync_new.GetValue());
-    ui->graphics_api_combo->setCurrentIndex(static_cast<int>(Settings::values.graphics_api.GetValue()));
-    ui->physical_device_combo->setCurrentIndex(static_cast<int>(Settings::values.physical_device.GetValue()));
+    ui->graphics_api_combo->setCurrentIndex(
+        static_cast<int>(Settings::values.graphics_api.GetValue()));
+    ui->physical_device_combo->setCurrentIndex(
+        static_cast<int>(Settings::values.physical_device.GetValue()));
     ui->toggle_async_recording->setChecked(Settings::values.async_command_recording.GetValue());
     ui->spirv_shader_gen->setChecked(Settings::values.spirv_shader_gen.GetValue());
 
@@ -106,12 +108,14 @@ void ConfigureGraphics::ApplyConfiguration() {
                                              ui->toggle_disk_shader_cache, use_disk_shader_cache);
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.use_vsync_new, ui->toggle_vsync_new,
                                              use_vsync_new);
-    ConfigurationShared::ApplyPerGameSetting(&Settings::values.graphics_api, ui->graphics_api_combo);
-    ConfigurationShared::ApplyPerGameSetting(&Settings::values.physical_device, ui->physical_device_combo);
-    ConfigurationShared::ApplyPerGameSetting(&Settings::values.async_command_recording, ui->toggle_async_recording,
-                                             async_command_recording);
-    ConfigurationShared::ApplyPerGameSetting(&Settings::values.spirv_shader_gen, ui->spirv_shader_gen,
-                                             spirv_shader_gen);
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.graphics_api,
+                                             ui->graphics_api_combo);
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.physical_device,
+                                             ui->physical_device_combo);
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.async_command_recording,
+                                             ui->toggle_async_recording, async_command_recording);
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.spirv_shader_gen,
+                                             ui->spirv_shader_gen, spirv_shader_gen);
 
     if (Settings::IsConfiguringGlobal()) {
         Settings::values.use_shader_jit = ui->toggle_shader_jit->isChecked();
@@ -168,9 +172,5 @@ void ConfigureGraphics::SetPhysicalDeviceComboVisibility(int index) {
     const bool is_visible = graphics_api == Settings::GraphicsAPI::Vulkan;
     ui->physical_device_label->setVisible(is_visible);
     ui->physical_device_combo->setVisible(is_visible);
-<<<<<<< HEAD
-}
-=======
     ui->spirv_shader_gen->setVisible(is_visible);
 }
->>>>>>> 25502ebc8 (citra_qt: Add SPIR-V shader option)

@@ -180,13 +180,13 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     auto [array_ptr, array_offset, invalidate] = vertex_buffer.Map(vs_input_size, 4);
 
     /**
-    * The Nintendo 3DS has 12 attribute loaders which are used to tell the GPU
-    * how to interpret vertex data. The program firsts sets GPUREG_ATTR_BUF_BASE to the base
-    * address containing the vertex array data. The data for each attribute loader (i) can be found
-    * by adding GPUREG_ATTR_BUFi_OFFSET to the base address. Attribute loaders can be thought
-    * as something analogous to Vulkan bindings. The user can store attributes in separate loaders
-    * or interleave them in the same loader.
-    **/
+     * The Nintendo 3DS has 12 attribute loaders which are used to tell the GPU
+     * how to interpret vertex data. The program firsts sets GPUREG_ATTR_BUF_BASE to the base
+     * address containing the vertex array data. The data for each attribute loader (i) can be found
+     * by adding GPUREG_ATTR_BUFi_OFFSET to the base address. Attribute loaders can be thought
+     * as something analogous to Vulkan bindings. The user can store attributes in separate loaders
+     * or interleave them in the same loader.
+     **/
     const auto& regs = Pica::g_state.regs;
     const auto& vertex_attributes = regs.pipeline.vertex_attributes;
     PAddr base_address = vertex_attributes.GetPhysicalBaseAddress(); // GPUREG_ATTR_BUF_BASE
@@ -213,7 +213,7 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
 
                     const u32 input_reg = regs.vs.GetRegisterForAttribute(attribute_index);
                     const Pica::PipelineRegs::VertexAttributeFormat format =
-                            vertex_attributes.GetFormat(attribute_index);
+                        vertex_attributes.GetFormat(attribute_index);
 
                     VertexAttribute& attribute = layout.attributes[layout.attribute_count++];
                     attribute.binding.Assign(layout.binding_count);
@@ -239,7 +239,8 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
         const u32 data_size = loader.byte_count * vertex_num;
 
         res_cache.FlushRegion(data_addr, data_size);
-        std::memcpy(array_ptr + buffer_offset, VideoCore::g_memory->GetPhysicalPointer(data_addr), data_size);
+        std::memcpy(array_ptr + buffer_offset, VideoCore::g_memory->GetPhysicalPointer(data_addr),
+                    data_size);
 
         // Create the binding associated with this loader
         VertexBinding& binding = layout.bindings[layout.binding_count];
@@ -259,12 +260,11 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     SetupFixedAttribs();
 
     // Bind the generated bindings
-    scheduler.Record([this, layout = pipeline_info.vertex_layout,
-                     offsets = binding_offsets](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+    scheduler.Record([this, layout = pipeline_info.vertex_layout, offsets = binding_offsets](
+                         vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
         std::array<vk::Buffer, 16> buffers;
         buffers.fill(vertex_buffer.GetHandle());
-        render_cmdbuf.bindVertexBuffers(0, layout.binding_count, buffers.data(),
-                                         offsets.data());
+        render_cmdbuf.bindVertexBuffers(0, layout.binding_count, buffers.data(), offsets.data());
     });
 }
 
@@ -367,7 +367,8 @@ bool RasterizerVulkan::AccelerateDrawBatch(bool is_indexed) {
 bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
     const auto& regs = Pica::g_state.regs;
 
-    const auto [vs_input_index_min, vs_input_index_max, vs_input_size] = AnalyzeVertexArray(is_indexed);
+    const auto [vs_input_index_min, vs_input_index_max, vs_input_size] =
+        AnalyzeVertexArray(is_indexed);
 
     if (vs_input_size > VERTEX_BUFFER_SIZE) {
         LOG_WARNING(Render_Vulkan, "Too large vertex input size {}", vs_input_size);
@@ -406,13 +407,16 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
         index_buffer.Commit(index_buffer_size);
 
         scheduler.Record([this, offset = index_offset, num_vertices = regs.pipeline.num_vertices,
-                         index_u16, vertex_offset = vs_input_index_min](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-            const vk::IndexType index_type = index_u16 ? vk::IndexType::eUint16 : vk::IndexType::eUint8EXT;
+                          index_u16, vertex_offset = vs_input_index_min](
+                             vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+            const vk::IndexType index_type =
+                index_u16 ? vk::IndexType::eUint16 : vk::IndexType::eUint8EXT;
             render_cmdbuf.bindIndexBuffer(index_buffer.GetHandle(), offset, index_type);
             render_cmdbuf.drawIndexed(num_vertices, 1, 0, -vertex_offset, 0);
         });
     } else {
-        scheduler.Record([num_vertices = regs.pipeline.num_vertices](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        scheduler.Record([num_vertices = regs.pipeline.num_vertices](
+                             vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
             render_cmdbuf.draw(num_vertices, 1, 0, 0);
         });
     }
@@ -718,8 +722,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         .render_area = vk::Rect2D{.offset = {static_cast<s32>(draw_rect.left),
                                              static_cast<s32>(draw_rect.bottom)},
                                   .extent = {draw_rect.GetWidth(), draw_rect.GetHeight()}},
-        .clear = {}
-    };
+        .clear = {}};
 
     renderpass_cache.EnterRenderpass(renderpass_info);
 
@@ -746,7 +749,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
             vertex_buffer.Commit(vertex_size);
 
             scheduler.Record([this, vertices, base_vertex,
-                             offset = offset](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer){
+                              offset = offset](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
                 render_cmdbuf.bindVertexBuffers(0, vertex_buffer.GetHandle(), offset);
                 render_cmdbuf.draw(vertices, 1, base_vertex, 0);
             });
@@ -1043,10 +1046,7 @@ bool RasterizerVulkan::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
 void RasterizerVulkan::MakeSoftwareVertexLayout() {
     constexpr std::array sizes = {4, 4, 2, 2, 2, 1, 4, 3};
 
-    software_layout = VertexLayout{
-        .binding_count = 1,
-        .attribute_count = 8
-    };
+    software_layout = VertexLayout{.binding_count = 1, .attribute_count = 8};
 
     for (u32 i = 0; i < software_layout.binding_count; i++) {
         VertexBinding& binding = software_layout.bindings[i];
@@ -1182,9 +1182,9 @@ void RasterizerVulkan::SyncLogicOp() {
     const auto& regs = Pica::g_state.regs;
 
     const bool is_logic_op_emulated =
-            instance.NeedsLogicOpEmulation() && !regs.framebuffer.output_merger.alphablend_enable;
+        instance.NeedsLogicOpEmulation() && !regs.framebuffer.output_merger.alphablend_enable;
     const bool is_logic_op_noop =
-            regs.framebuffer.output_merger.logic_op == Pica::FramebufferRegs::LogicOp::NoOp;
+        regs.framebuffer.output_merger.logic_op == Pica::FramebufferRegs::LogicOp::NoOp;
     if (is_logic_op_emulated && is_logic_op_noop) {
         // Color output is disabled by logic operation. We use color write mask to skip
         // color but allow depth write.
@@ -1199,9 +1199,9 @@ void RasterizerVulkan::SyncColorWriteMask() {
     const u32 color_mask = (regs.framebuffer.output_merger.depth_color_mask >> 8) & 0xF;
 
     const bool is_logic_op_emulated =
-            instance.NeedsLogicOpEmulation() && !regs.framebuffer.output_merger.alphablend_enable;
+        instance.NeedsLogicOpEmulation() && !regs.framebuffer.output_merger.alphablend_enable;
     const bool is_logic_op_noop =
-            regs.framebuffer.output_merger.logic_op == Pica::FramebufferRegs::LogicOp::NoOp;
+        regs.framebuffer.output_merger.logic_op == Pica::FramebufferRegs::LogicOp::NoOp;
     if (is_logic_op_emulated && is_logic_op_noop) {
         // Color output is disabled by logic operation. We use color write mask to skip
         // color but allow depth write. Return early to avoid overwriting this.

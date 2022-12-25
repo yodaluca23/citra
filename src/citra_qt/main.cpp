@@ -2255,7 +2255,7 @@ void GMainWindow::UpdateAPIIndicator(bool override) {
     static std::array graphics_api_colors = {QStringLiteral("#00ccdd"), QStringLiteral("#ba2a8d"),
                                              QStringLiteral("#91242a")};
 
-    u32 api_index = static_cast<u32>(Settings::values.graphics_api);
+    u32 api_index = static_cast<u32>(Settings::values.graphics_api.GetValue());
     if (override) {
         api_index = (api_index + 1) % graphics_apis.size();
         Settings::values.graphics_api = static_cast<Settings::GraphicsAPI>(api_index);

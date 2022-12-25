@@ -5,11 +5,11 @@
 #include <algorithm>
 #include "common/alignment.h"
 #include "common/assert.h"
-#include "common/microprofile.h"
 #include "common/logging/log.h"
+#include "common/microprofile.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
-#include "video_core/renderer_vulkan/vk_stream_buffer.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
+#include "video_core/renderer_vulkan/vk_stream_buffer.h"
 
 #include <vk_mem_alloc.h>
 
@@ -80,16 +80,15 @@ StagingBuffer::~StagingBuffer() {
     vmaDestroyBuffer(instance.GetAllocator(), static_cast<VkBuffer>(buffer), allocation);
 }
 
-StreamBuffer::StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size,
-                           bool readback)
-    : instance{instance}, scheduler{scheduler}, staging{instance, size, readback},
-      total_size{size}, bucket_size{size / BUCKET_COUNT}, readback{readback} {}
+StreamBuffer::StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size, bool readback)
+    : instance{instance}, scheduler{scheduler}, staging{instance, size, readback}, total_size{size},
+      bucket_size{size / BUCKET_COUNT}, readback{readback} {}
 
 StreamBuffer::StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size,
                            vk::BufferUsageFlagBits usage, std::span<const vk::Format> view_formats,
                            bool readback)
-    : instance{instance}, scheduler{scheduler}, staging{instance, size, readback},
-      usage{usage}, total_size{size}, bucket_size{size / BUCKET_COUNT}, readback{readback} {
+    : instance{instance}, scheduler{scheduler}, staging{instance, size, readback}, usage{usage},
+      total_size{size}, bucket_size{size / BUCKET_COUNT}, readback{readback} {
     const vk::BufferCreateInfo buffer_info = {
         .size = total_size, .usage = usage | vk::BufferUsageFlagBits::eTransferDst};
 
@@ -176,7 +175,8 @@ void StreamBuffer::Flush() {
         VmaAllocator allocator = instance.GetAllocator();
         vmaFlushAllocation(allocator, staging.allocation, flush_offset, flush_size);
         if (gpu_buffer) {
-            scheduler.Record([this, flush_offset = flush_offset, flush_size](vk::CommandBuffer, vk::CommandBuffer upload_cmdbuf) {
+            scheduler.Record([this, flush_offset = flush_offset,
+                              flush_size](vk::CommandBuffer, vk::CommandBuffer upload_cmdbuf) {
                 const vk::BufferCopy copy_region = {
                     .srcOffset = flush_offset, .dstOffset = flush_offset, .size = flush_size};
 
@@ -191,10 +191,9 @@ void StreamBuffer::Flush() {
                     .offset = flush_offset,
                     .size = flush_size};
 
-                upload_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                                              MakePipelineStage(usage),
-                                              vk::DependencyFlagBits::eByRegion, {}, buffer_barrier,
-                                              {});
+                upload_cmdbuf.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eTransfer, MakePipelineStage(usage),
+                    vk::DependencyFlagBits::eByRegion, {}, buffer_barrier, {});
             });
         }
         flush_offset = buffer_offset;

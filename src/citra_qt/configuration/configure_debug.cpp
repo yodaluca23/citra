@@ -3,8 +3,8 @@
 // Refer to the license.txt file included.
 
 #include <QDesktopServices>
-#include <QUrl>
 #include <QMessageBox>
+#include <QUrl>
 #include "citra_qt/configuration/configure_debug.h"
 #include "citra_qt/debugger/console.h"
 #include "citra_qt/uisettings.h"
@@ -27,31 +27,31 @@ ConfigureDebug::ConfigureDebug(QWidget* parent)
     });
 
     connect(ui->toggle_renderer_debug, &QCheckBox::clicked, this, [this](bool checked) {
-        if (checked && Settings::values.graphics_api == Settings::GraphicsAPI::Vulkan) {
+        if (checked && Settings::values.graphics_api.GetValue() == Settings::GraphicsAPI::Vulkan) {
             try {
                 Vulkan::Instance debug_inst{true};
             } catch (vk::LayerNotPresentError&) {
                 ui->toggle_renderer_debug->toggle();
-                QMessageBox::warning(
-                    this, tr("Validation layer not available"),
-                    tr("Unable to enable debug renderer because the layer "
-                       "<strong>VK_LAYER_KHRONOS_validation</strong> is missing. "
-                       "Please install the Vulkan SDK or the appropriate package of your distribution"));
+                QMessageBox::warning(this, tr("Validation layer not available"),
+                                     tr("Unable to enable debug renderer because the layer "
+                                        "<strong>VK_LAYER_KHRONOS_validation</strong> is missing. "
+                                        "Please install the Vulkan SDK or the appropriate package "
+                                        "of your distribution"));
             }
         }
     });
 
     connect(ui->toggle_dump_command_buffers, &QCheckBox::clicked, this, [this](bool checked) {
-        if (checked && Settings::values.graphics_api == Settings::GraphicsAPI::Vulkan) {
+        if (checked && Settings::values.graphics_api.GetValue() == Settings::GraphicsAPI::Vulkan) {
             try {
                 Vulkan::Instance debug_inst{false, true};
             } catch (vk::LayerNotPresentError&) {
                 ui->toggle_dump_command_buffers->toggle();
-                QMessageBox::warning(
-                    this, tr("Command buffer dumping not available"),
-                    tr("Unable to enable command buffer dumping because the layer "
-                       "<strong>VK_LAYER_LUNARG_api_dump</strong> is missing. "
-                       "Please install the Vulkan SDK or the appropriate package of your distribution"));
+                QMessageBox::warning(this, tr("Command buffer dumping not available"),
+                                     tr("Unable to enable command buffer dumping because the layer "
+                                        "<strong>VK_LAYER_LUNARG_api_dump</strong> is missing. "
+                                        "Please install the Vulkan SDK or the appropriate package "
+                                        "of your distribution"));
             }
         }
     });

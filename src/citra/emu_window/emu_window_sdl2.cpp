@@ -137,7 +137,8 @@ void EmuWindow_SDL2::Fullscreen() {
 
 EmuWindow_SDL2::EmuWindow_SDL2(bool fullscreen, bool is_secondary) : EmuWindow(is_secondary) {
     // Initialize the window
-    const bool is_opengles = Settings::values.graphics_api == Settings::GraphicsAPI::OpenGLES;
+    const bool is_opengles =
+        Settings::values.graphics_api.GetValue() == Settings::GraphicsAPI::OpenGLES;
     if (is_opengles) {
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
