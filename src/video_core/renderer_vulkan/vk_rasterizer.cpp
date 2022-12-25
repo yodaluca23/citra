@@ -21,7 +21,7 @@
 
 namespace Vulkan {
 
-constexpr u32 VERTEX_BUFFER_SIZE = 256 * 1024 * 1024;
+constexpr u32 VERTEX_BUFFER_SIZE = 64 * 1024 * 1024;
 constexpr u32 INDEX_BUFFER_SIZE = 16 * 1024 * 1024;
 constexpr u32 UNIFORM_BUFFER_SIZE = 16 * 1024 * 1024;
 constexpr u32 TEXTURE_BUFFER_SIZE = 16 * 1024 * 1024;
@@ -177,7 +177,7 @@ void RasterizerVulkan::SyncFixedState() {
 
 void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_min,
                                         u32 vs_input_index_max) {
-    auto [array_ptr, array_offset, invalidate] = vertex_buffer.Map(vs_input_size, 4);
+    auto [array_ptr, array_offset, invalidate] = vertex_buffer.Map(vs_input_size);
 
     /**
      * The Nintendo 3DS has 12 attribute loaders which are used to tell the GPU
@@ -402,7 +402,7 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
             regs.pipeline.index_array.offset);
 
         // Upload index buffer data to the GPU
-        auto [index_ptr, index_offset, _] = index_buffer.Map(index_buffer_size, 4);
+        auto [index_ptr, index_offset, _] = index_buffer.Map(index_buffer_size);
         std::memcpy(index_ptr, index_data, index_buffer_size);
         index_buffer.Commit(index_buffer_size);
 
@@ -744,7 +744,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
             const u32 vertex_size = vertices * sizeof(HardwareVertex);
 
             // Copy vertex data
-            auto [array_ptr, offset, _] = vertex_buffer.Map(vertex_size, sizeof(HardwareVertex));
+            auto [array_ptr, offset, _] = vertex_buffer.Map(vertex_size);
             std::memcpy(array_ptr, vertex_batch.data() + base_vertex, vertex_size);
             vertex_buffer.Commit(vertex_size);
 
@@ -1266,7 +1266,7 @@ void RasterizerVulkan::SyncAndUploadLUTsLF() {
     }
 
     std::size_t bytes_used = 0;
-    auto [buffer, offset, invalidate] = texture_lf_buffer.Map(max_size, sizeof(Common::Vec4f));
+    auto [buffer, offset, invalidate] = texture_lf_buffer.Map(max_size);
 
     // Sync the lighting luts
     if (uniform_block_data.lighting_lut_dirty_any || invalidate) {
@@ -1332,7 +1332,7 @@ void RasterizerVulkan::SyncAndUploadLUTs() {
     }
 
     std::size_t bytes_used = 0;
-    auto [buffer, offset, invalidate] = texture_buffer.Map(max_size, sizeof(Common::Vec4f));
+    auto [buffer, offset, invalidate] = texture_buffer.Map(max_size);
 
     // helper function for SyncProcTexNoiseLUT/ColorMap/AlphaMap
     auto SyncProcTexValueLUT =
@@ -1434,8 +1434,7 @@ void RasterizerVulkan::UploadUniforms(bool accelerate_draw) {
 
     u32 used_bytes = 0;
     const u32 uniform_size = static_cast<u32>(uniform_size_aligned_vs + uniform_size_aligned_fs);
-    auto [uniforms, offset, invalidate] =
-        uniform_buffer.Map(uniform_size, static_cast<u32>(uniform_buffer_alignment));
+    auto [uniforms, offset, invalidate] = uniform_buffer.Map(uniform_size);
 
     if (sync_vs) {
         Pica::Shader::VSUniformData vs_uniforms;

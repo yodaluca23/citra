@@ -111,7 +111,7 @@ TextureRuntime::~TextureRuntime() {
 StagingData TextureRuntime::FindStaging(u32 size, bool upload) {
     // Depth uploads require 4 byte alignment, doesn't hurt to do it for everyone
     auto& buffer = upload ? upload_buffer : download_buffer;
-    auto [data, offset, invalidate] = buffer.Map(size, 4);
+    auto [data, offset, invalidate] = buffer.Map(size);
 
     return StagingData{.buffer = buffer.GetStagingHandle(),
                        .size = size,
