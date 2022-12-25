@@ -92,8 +92,7 @@ constexpr TBuiltInResource DefaultTBuiltInResource = {
     .maxCombinedAtomicCounterBuffers = 1,
     .maxAtomicCounterBufferSize = 16384,
     .maxTransformFeedbackBuffers = 4,
-    .maxTransformFeedbackInterleavedComponents =
-      64,
+    .maxTransformFeedbackInterleavedComponents = 64,
     .maxCullDistances = 8,
     .maxCombinedClipAndCullDistances = 8,
     .maxSamples = 4,
@@ -107,17 +106,18 @@ constexpr TBuiltInResource DefaultTBuiltInResource = {
     .maxTaskWorkGroupSizeZ_NV = 1,
     .maxMeshViewCountNV = 4,
     .maxDualSourceDrawBuffersEXT = 1,
-    .limits = TLimits{
-      .nonInductiveForLoops = 1,
-      .whileLoops = 1,
-      .doWhileLoops = 1,
-      .generalUniformIndexing = 1,
-      .generalAttributeMatrixVectorIndexing = 1,
-      .generalVaryingIndexing = 1,
-      .generalSamplerIndexing = 1,
-      .generalVariableIndexing = 1,
-      .generalConstantMatrixVectorIndexing = 1,
-    },
+    .limits =
+        TLimits{
+            .nonInductiveForLoops = 1,
+            .whileLoops = 1,
+            .doWhileLoops = 1,
+            .generalUniformIndexing = 1,
+            .generalAttributeMatrixVectorIndexing = 1,
+            .generalVaryingIndexing = 1,
+            .generalSamplerIndexing = 1,
+            .generalVariableIndexing = 1,
+            .generalConstantMatrixVectorIndexing = 1,
+        },
 };
 
 EShLanguage ToEshShaderStage(vk::ShaderStageFlagBits stage) {

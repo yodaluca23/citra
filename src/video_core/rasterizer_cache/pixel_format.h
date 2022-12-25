@@ -76,24 +76,24 @@ constexpr u32 GetFormatBpp(PixelFormat format) {
 }
 
 constexpr std::array<SurfaceType, PIXEL_FORMAT_COUNT> FORMAT_TYPE_TABLE = {{
-    SurfaceType::Color,         // RGBA8
-    SurfaceType::Color,         // RGB8
-    SurfaceType::Color,         // RGB5A1
-    SurfaceType::Color,         // RGB565
-    SurfaceType::Color,         // RGBA4
-    SurfaceType::Texture,       // IA8
-    SurfaceType::Texture,       // RG8
-    SurfaceType::Texture,       // I8
-    SurfaceType::Texture,       // A8
-    SurfaceType::Texture,       // IA4
-    SurfaceType::Texture,       // I4
-    SurfaceType::Texture,       // A4
-    SurfaceType::Texture,       // ETC1
-    SurfaceType::Texture,       // ETC1A4
-    SurfaceType::Depth,         // D16
+    SurfaceType::Color,   // RGBA8
+    SurfaceType::Color,   // RGB8
+    SurfaceType::Color,   // RGB5A1
+    SurfaceType::Color,   // RGB565
+    SurfaceType::Color,   // RGBA4
+    SurfaceType::Texture, // IA8
+    SurfaceType::Texture, // RG8
+    SurfaceType::Texture, // I8
+    SurfaceType::Texture, // A8
+    SurfaceType::Texture, // IA4
+    SurfaceType::Texture, // I4
+    SurfaceType::Texture, // A4
+    SurfaceType::Texture, // ETC1
+    SurfaceType::Texture, // ETC1A4
+    SurfaceType::Depth,   // D16
     SurfaceType::Invalid,
-    SurfaceType::Depth,         // D24
-    SurfaceType::DepthStencil,  // D24S8
+    SurfaceType::Depth,        // D24
+    SurfaceType::DepthStencil, // D24S8
 }};
 
 constexpr SurfaceType GetFormatType(PixelFormat format) {

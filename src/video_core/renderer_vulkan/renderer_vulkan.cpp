@@ -19,10 +19,10 @@
 #include "video_core/renderer_vulkan/vk_shader_util.h"
 #include "video_core/video_core.h"
 
-#include "video_core/host_shaders/vulkan_present_vert_spv.h"
-#include "video_core/host_shaders/vulkan_present_frag_spv.h"
 #include "video_core/host_shaders/vulkan_present_anaglyph_frag_spv.h"
+#include "video_core/host_shaders/vulkan_present_frag_spv.h"
 #include "video_core/host_shaders/vulkan_present_interlaced_frag_spv.h"
+#include "video_core/host_shaders/vulkan_present_vert_spv.h"
 
 namespace Vulkan {
 
@@ -832,8 +832,7 @@ void RendererVulkan::SwapBuffers() {
 
     const auto RecreateSwapchain = [&] {
         scheduler.Finish();
-        const Layout::FramebufferLayout layout = render_window.GetFramebufferLayout();
-        swapchain.Create(layout.width, layout.height);
+        swapchain.Create();
     };
 
     do {

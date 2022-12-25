@@ -116,8 +116,13 @@ Instance::Instance(bool validation, bool dump_command_buffers)
                                                   .engineVersion = VK_MAKE_VERSION(1, 0, 0),
                                                   .apiVersion = VK_API_VERSION_1_0};
 
+    std::array<const char*, 3> layers;
+#ifdef ANDROID
+    u32 layer_count = 1;
+    layers[0] = "VK_LAYER_KHRONOS_timeline_semaphore";
+#else
     u32 layer_count = 0;
-    std::array<const char*, 2> layers;
+#endif
 
     if (enable_validation) {
         layers[layer_count++] = "VK_LAYER_KHRONOS_validation";
@@ -159,7 +164,7 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
     // Enable the instance extensions the backend uses
-    auto extensions = GetInstanceExtensions(window_info.type, true);
+    auto extensions = GetInstanceExtensions(window_info.type, enable_validation);
 
     // Use required platform-specific flags
     auto flags = GetInstanceFlags();

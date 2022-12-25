@@ -59,8 +59,9 @@ constexpr u32 DOWNLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
 TextureRuntime::TextureRuntime(Driver& driver)
     : driver{driver}, filterer{Settings::values.texture_filter_name.GetValue(),
                                VideoCore::GetResolutionScaleFactor()},
-      upload_buffer{GL_PIXEL_UNPACK_BUFFER, UPLOAD_BUFFER_SIZE},
-      download_buffer{GL_PIXEL_PACK_BUFFER, DOWNLOAD_BUFFER_SIZE, true} {
+      upload_buffer{GL_PIXEL_UNPACK_BUFFER, UPLOAD_BUFFER_SIZE}, download_buffer{
+                                                                     GL_PIXEL_PACK_BUFFER,
+                                                                     DOWNLOAD_BUFFER_SIZE, true} {
 
     read_fbo.Create();
     draw_fbo.Create();
@@ -466,7 +467,8 @@ void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download,
 
     const auto& tuple = runtime.GetFormatTuple(pixel_format);
     if (driver.IsOpenGLES()) {
-        runtime.BindFramebuffer(GL_READ_FRAMEBUFFER, 0, GL_TEXTURE_2D, type, unscaled_surface.texture);
+        runtime.BindFramebuffer(GL_READ_FRAMEBUFFER, 0, GL_TEXTURE_2D, type,
+                                unscaled_surface.texture);
         glReadPixels(0, 0, rect_width, rect_height, tuple.format, tuple.type,
                      reinterpret_cast<void*>(staging.buffer_offset));
     } else {
