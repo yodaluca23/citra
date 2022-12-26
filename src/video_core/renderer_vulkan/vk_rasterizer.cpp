@@ -401,19 +401,19 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
             regs.pipeline.vertex_attributes.GetPhysicalBaseAddress() +
             regs.pipeline.index_array.offset);
 
-        // Upload index buffer data to the GPU
         auto [index_ptr, index_offset, _] = index_buffer.Map(index_buffer_size);
         std::memcpy(index_ptr, index_data, index_buffer_size);
         index_buffer.Commit(index_buffer_size);
 
-        scheduler.Record([this, offset = index_offset, num_vertices = regs.pipeline.num_vertices,
-                          index_u16, vertex_offset = vs_input_index_min](
-                             vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-            const vk::IndexType index_type =
-                index_u16 ? vk::IndexType::eUint16 : vk::IndexType::eUint8EXT;
-            render_cmdbuf.bindIndexBuffer(index_buffer.GetHandle(), offset, index_type);
-            render_cmdbuf.drawIndexed(num_vertices, 1, 0, -vertex_offset, 0);
-        });
+        scheduler.Record(
+            [this, offset = index_offset, index_u16, num_vertices = regs.pipeline.num_vertices,
+             vertex_offset = static_cast<s32>(vs_input_index_min)](vk::CommandBuffer render_cmdbuf,
+                                                                   vk::CommandBuffer) {
+                const vk::IndexType index_type =
+                    index_u16 ? vk::IndexType::eUint16 : vk::IndexType::eUint8EXT;
+                render_cmdbuf.bindIndexBuffer(index_buffer.GetHandle(), offset, index_type);
+                render_cmdbuf.drawIndexed(num_vertices, 1, 0, -vertex_offset, 0);
+            });
     } else {
         scheduler.Record([num_vertices = regs.pipeline.num_vertices](
                              vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
