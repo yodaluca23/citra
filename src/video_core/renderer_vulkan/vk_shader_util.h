@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include <span>
 #include "video_core/renderer_vulkan/vk_common.h"
 
 namespace Vulkan {

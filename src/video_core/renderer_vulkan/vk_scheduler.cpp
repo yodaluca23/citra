@@ -29,16 +29,31 @@ void Scheduler::CommandChunk::ExecuteAll(vk::CommandBuffer render_cmdbuf,
 Scheduler::Scheduler(const Instance& instance, RenderpassCache& renderpass_cache,
                      RendererVulkan& renderer)
     : instance{instance}, renderpass_cache{renderpass_cache}, renderer{renderer},
-      master_semaphore{instance}, command_pool{instance, master_semaphore},
+      master_semaphore{instance}, command_pool{instance, master_semaphore}, stop_requested{false},
       use_worker_thread{Settings::values.async_command_recording} {
     AllocateWorkerCommandBuffers();
     if (use_worker_thread) {
         AcquireNewChunk();
-        worker_thread = std::jthread([this](std::stop_token token) { WorkerThread(token); });
+        worker_thread = std::thread([this]() { WorkerThread(); });
     }
 }
 
-Scheduler::~Scheduler() = default;
+Scheduler::~Scheduler() {
+    if (!use_worker_thread) {
+        return;
+    }
+
+    stop_requested = true;
+
+    // Push a dummy chunk to unblock the thread
+    {
+        std::scoped_lock lock{work_mutex};
+        work_queue.push(std::move(chunk));
+    }
+
+    work_cv.notify_one();
+    worker_thread.join();
+}
 
 void Scheduler::Flush(vk::Semaphore signal, vk::Semaphore wait) {
     SubmitExecution(signal, wait);
@@ -78,7 +93,7 @@ void Scheduler::DispatchWork() {
     AcquireNewChunk();
 }
 
-void Scheduler::WorkerThread(std::stop_token stop_token) {
+void Scheduler::WorkerThread() {
     do {
         std::unique_ptr<CommandChunk> work;
         bool has_submit{false};
@@ -87,8 +102,8 @@ void Scheduler::WorkerThread(std::stop_token stop_token) {
             if (work_queue.empty()) {
                 wait_cv.notify_all();
             }
-            Common::CondvarWait(work_cv, lock, stop_token, [&] { return !work_queue.empty(); });
-            if (stop_token.stop_requested()) {
+            work_cv.wait(lock, [this] { return !work_queue.empty() || stop_requested; });
+            if (stop_requested) {
                 continue;
             }
             work = std::move(work_queue.front());
@@ -102,7 +117,7 @@ void Scheduler::WorkerThread(std::stop_token stop_token) {
         }
         std::scoped_lock reserve_lock{reserve_mutex};
         chunk_reserve.push_back(std::move(work));
-    } while (!stop_token.stop_requested());
+    } while (!stop_requested);
 }
 
 void Scheduler::AllocateWorkerCommandBuffers() {
