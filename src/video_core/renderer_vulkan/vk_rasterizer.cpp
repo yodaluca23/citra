@@ -451,7 +451,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
     const Common::Rectangle viewport_rect_unscaled = regs.rasterizer.GetViewportRect();
 
-    auto [color_surface, depth_surface, surfaces_rect] =
+    const auto [color_surface, depth_surface, surfaces_rect] =
         res_cache.GetFramebufferSurfaces(using_color_fb, using_depth_fb, viewport_rect_unscaled);
 
     if (!color_surface && shadow_rendering) {
@@ -680,13 +680,28 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     pipeline_cache.SetScissor(draw_rect.left, draw_rect.bottom, draw_rect.GetWidth(),
                               draw_rect.GetHeight());
 
+    // Sometimes the dimentions of the color and depth framebuffers might not be the same
+    // In that case select the minimum one to abide by the spec
+    u32 width = 0;
+    u32 height = 0;
+    if (color_surface && depth_surface) {
+        width = std::min(color_surface->GetScaledWidth(), depth_surface->GetScaledWidth());
+        height = std::min(color_surface->GetScaledHeight(), depth_surface->GetScaledHeight());
+    } else if (color_surface) {
+        width = color_surface->GetScaledWidth();
+        height = color_surface->GetScaledHeight();
+    } else if (depth_surface) {
+        width = depth_surface->GetScaledWidth();
+        height = depth_surface->GetScaledHeight();
+    }
+
     const FramebufferInfo framebuffer_info = {
         .color = color_surface ? color_surface->GetFramebufferView() : VK_NULL_HANDLE,
         .depth = depth_surface ? depth_surface->GetFramebufferView() : VK_NULL_HANDLE,
         .renderpass = renderpass_cache.GetRenderpass(pipeline_info.color_attachment,
                                                      pipeline_info.depth_attachment, false),
-        .width = surfaces_rect.GetWidth(),
-        .height = surfaces_rect.GetHeight()};
+        .width = width,
+        .height = height};
 
     auto [it, new_framebuffer] = framebuffers.try_emplace(framebuffer_info, vk::Framebuffer{});
     if (new_framebuffer) {
@@ -755,6 +770,13 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         auto interval = depth_surface->GetSubRectInterval(draw_rect_unscaled);
         res_cache.InvalidateRegion(boost::icl::first(interval), boost::icl::length(interval),
                                    depth_surface);
+    }
+
+    static int submit_threshold = 80;
+    submit_threshold--;
+    if (!submit_threshold) {
+        submit_threshold = 80;
+        scheduler.Flush();
     }
 
     return succeeded;
