@@ -206,6 +206,7 @@ bool PipelineCache::UseProgrammableVertexShader(const Pica::Regs& regs,
                                                 Pica::Shader::ShaderSetup& setup,
                                                 const VertexLayout& layout) {
     PicaVSConfig config{regs.rasterizer, regs.vs, setup};
+    config.state.use_geometry_shader = instance.UseGeometryShaders();
 
     u32 emulated_attrib_loc = MAX_VERTEX_ATTRIBUTES;
     for (u32 i = 0; i < layout.attribute_count; i++) {
@@ -243,7 +244,10 @@ void PipelineCache::UseTrivialVertexShader() {
 }
 
 void PipelineCache::UseFixedGeometryShader(const Pica::Regs& regs) {
-    return UseTrivialGeometryShader();
+    if (!instance.UseGeometryShaders()) {
+        return UseTrivialGeometryShader();
+    }
+
     const PicaFixedGSConfig gs_config{regs};
     const vk::ShaderModule handle =
         fixed_geometry_shaders.Get(gs_config, vk::ShaderStageFlagBits::eGeometry,
@@ -285,7 +289,7 @@ void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
 
 void PipelineCache::BindTexture(u32 binding, vk::ImageView image_view) {
     const vk::DescriptorImageInfo image_info = {
-        .imageView = image_view, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
+        .imageView = image_view, .imageLayout = vk::ImageLayout::eGeneral};
     desc_manager.SetBinding(1, binding, DescriptorData{image_info});
 }
 

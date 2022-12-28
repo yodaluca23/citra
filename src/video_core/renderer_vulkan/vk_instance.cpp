@@ -164,7 +164,7 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
     // Enable the instance extensions the backend uses
-    auto extensions = GetInstanceExtensions(window_info.type, enable_validation);
+    auto extensions = GetInstanceExtensions(window_info.type, false);
 
     // Use required platform-specific flags
     auto flags = GetInstanceFlags();
@@ -182,8 +182,13 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
                                                   .engineVersion = VK_MAKE_VERSION(1, 0, 0),
                                                   .apiVersion = available_version};
 
+    std::array<const char*, 3> layers;
+#ifdef ANDROID
+    u32 layer_count = 1;
+    layers[0] = "VK_LAYER_KHRONOS_timeline_semaphore";
+#else
     u32 layer_count = 0;
-    std::array<const char*, 2> layers;
+#endif
 
     if (enable_validation) {
         layers[layer_count++] = "VK_LAYER_KHRONOS_validation";
@@ -285,12 +290,12 @@ void Instance::CreateFormatTable() {
         const vk::FormatFeatureFlagBits attachment_usage =
             (aspect & vk::ImageAspectFlagBits::eDepth)
                 ? vk::FormatFeatureFlagBits::eDepthStencilAttachment
-                : vk::FormatFeatureFlagBits::eColorAttachment;
+                : vk::FormatFeatureFlagBits::eColorAttachmentBlend;
 
         const bool supports_transfer =
             (properties.optimalTilingFeatures & transfer_usage) == transfer_usage;
         const bool supports_blit = (properties.optimalTilingFeatures & blit_usage) == blit_usage;
-        const bool supports_attachment =
+        bool supports_attachment =
             (properties.optimalTilingFeatures & attachment_usage) == attachment_usage;
         const bool supports_storage =
             (properties.optimalTilingFeatures & storage_usage) == storage_usage;
@@ -323,6 +328,10 @@ void Instance::CreateFormatTable() {
         if (!supports_blit && !supports_attachment && !supports_storage) {
             LOG_WARNING(Render_Vulkan, "Format {} unsupported, falling back unconditionally to {}",
                         vk::to_string(format), vk::to_string(fallback));
+        }
+
+        if (pixel_format == VideoCore::PixelFormat::RGB8) {
+            supports_attachment = false;
         }
 
         const u32 index = static_cast<u32>(pixel_format);
@@ -448,9 +457,10 @@ bool Instance::CreateDevice() {
                          .shaderStorageImageMultisample = available.shaderStorageImageMultisample,
                          .shaderClipDistance = available.shaderClipDistance}},
         vk::PhysicalDeviceIndexTypeUint8FeaturesEXT{.indexTypeUint8 = true},
-        feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
+        //feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
         feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>(),
-        feature_chain.get<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>()};
+        //feature_chain.get<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>()
+                };
 
     // Create logical device
     try {

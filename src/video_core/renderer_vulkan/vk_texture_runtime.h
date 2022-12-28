@@ -114,9 +114,6 @@ public:
     void FormatConvert(const Surface& surface, bool upload, std::span<std::byte> source,
                        std::span<std::byte> dest);
 
-    /// Transitions the mip level range of the surface to new_layout
-    void Transition(ImageAlloc& alloc, vk::ImageLayout new_layout, u32 level, u32 level_count);
-
     /// Fills the rectangle of the texture with the clear value provided
     bool ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
                       VideoCore::ClearValue value);
@@ -140,7 +137,16 @@ public:
     /// Returns true if the provided pixel format needs convertion
     [[nodiscard]] bool NeedsConvertion(VideoCore::PixelFormat format) const;
 
+    /// Returns a reference to the renderpass cache
+    [[nodiscard]] RenderpassCache& GetRenderpassCache() {
+        return renderpass_cache;
+    }
+
 private:
+    /// Clears a partial texture rect using a clear rectangle
+    void ClearTextureWithRenderpass(Surface& surface, const VideoCore::TextureClear& clear,
+                                    VideoCore::ClearValue value);
+
     /// Returns the current Vulkan instance
     const Instance& GetInstance() const {
         return instance;
@@ -174,9 +180,6 @@ public:
     Surface(const VideoCore::SurfaceParams& params, vk::Format format, vk::ImageUsageFlags usage,
             TextureRuntime& runtime);
     ~Surface() override;
-
-    /// Transitions the mip level range of the surface to new_layout
-    void Transition(vk::ImageLayout new_layout, u32 level, u32 level_count);
 
     /// Uploads pixel data in staging to a rectangle region of the surface texture
     void Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging);

@@ -24,7 +24,7 @@ namespace Vulkan {
 constexpr u32 VERTEX_BUFFER_SIZE = 64 * 1024 * 1024;
 constexpr u32 INDEX_BUFFER_SIZE = 16 * 1024 * 1024;
 constexpr u32 UNIFORM_BUFFER_SIZE = 16 * 1024 * 1024;
-constexpr u32 TEXTURE_BUFFER_SIZE = 16 * 1024 * 1024;
+constexpr u32 TEXTURE_BUFFER_SIZE = 512 * 1024;
 
 constexpr std::array TEXTURE_BUFFER_LF_FORMATS = {vk::Format::eR32G32Sfloat};
 
@@ -61,9 +61,6 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
                      vk::BufferUsageFlagBits::eUniformTexelBuffer, TEXTURE_BUFFER_FORMATS},
       texture_lf_buffer{instance, scheduler, TEXTURE_BUFFER_SIZE,
                         vk::BufferUsageFlagBits::eUniformTexelBuffer, TEXTURE_BUFFER_LF_FORMATS} {
-
-    null_surface.Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0, 1);
-    null_storage_surface.Transition(vk::ImageLayout::eGeneral, 0, 1);
 
     uniform_buffer_alignment = instance.UniformMinAlignment();
     uniform_size_aligned_vs =
@@ -563,7 +560,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                 case TextureType::Shadow2D: {
                     auto surface = res_cache.GetTextureSurface(texture);
                     if (surface) {
-                        surface->Transition(vk::ImageLayout::eGeneral, 0, surface->alloc.levels);
                         pipeline_cache.BindStorageImage(0, surface->GetStorageView());
                     } else {
                         pipeline_cache.BindStorageImage(0, null_storage_surface.GetImageView());
@@ -596,8 +592,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
                     auto surface = res_cache.GetTextureCube(config);
                     if (surface) {
-                        surface->Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0,
-                                            surface->alloc.levels);
                         pipeline_cache.BindTexture(3, surface->GetImageView());
                     } else {
                         pipeline_cache.BindTexture(3, null_surface.GetImageView());
@@ -628,12 +622,8 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                         .extent = VideoCore::Extent{temp.GetScaledWidth(), temp.GetScaledHeight()}};
 
                     runtime.CopyTextures(*color_surface, temp, copy);
-                    temp.Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0, temp.alloc.levels);
-
                     pipeline_cache.BindTexture(texture_index, temp.GetImageView());
                 } else {
-                    surface->Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0,
-                                        surface->alloc.levels);
                     pipeline_cache.BindTexture(texture_index, surface->GetImageView());
                 }
 
@@ -708,21 +698,28 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         it->second = CreateFramebuffer(framebuffer_info);
     }
 
-    if (color_surface) {
-        color_surface->Transition(vk::ImageLayout::eColorAttachmentOptimal, 0, 1);
-    }
-
-    if (depth_surface) {
-        depth_surface->Transition(vk::ImageLayout::eDepthStencilAttachmentOptimal, 0, 1);
-    }
-
     const RenderpassState renderpass_info = {
         .renderpass = framebuffer_info.renderpass,
         .framebuffer = it->second,
         .render_area = vk::Rect2D{.offset = {static_cast<s32>(draw_rect.left),
                                              static_cast<s32>(draw_rect.bottom)},
                                   .extent = {draw_rect.GetWidth(), draw_rect.GetHeight()}},
-        .clear = {}};
+        .clear = {},
+    };
+
+    renderpass_cache.ExitRenderpass();
+
+    scheduler.Record([](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        const vk::MemoryBarrier memory_write_barrier = {
+                .srcAccessMask = vk::AccessFlagBits::eMemoryWrite,
+                .dstAccessMask = vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite,
+        };
+
+        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
+                                      vk::PipelineStageFlagBits::eAllCommands,
+                                      vk::DependencyFlagBits::eByRegion,
+                                      memory_write_barrier, {}, {});
+    });
 
     renderpass_cache.EnterRenderpass(renderpass_info);
 
@@ -772,10 +769,10 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                                    depth_surface);
     }
 
-    static int submit_threshold = 80;
+    static int submit_threshold = 120;
     submit_threshold--;
     if (!submit_threshold) {
-        submit_threshold = 80;
+        submit_threshold = 120;
         scheduler.Flush();
     }
 
@@ -1094,7 +1091,7 @@ vk::Sampler RasterizerVulkan::CreateSampler(const SamplerInfo& info) {
         .addressModeU = PicaToVK::WrapMode(info.wrap_s),
         .addressModeV = PicaToVK::WrapMode(info.wrap_t),
         .mipLodBias = info.lod_bias / 256.0f,
-        .anisotropyEnable = true,
+        .anisotropyEnable = instance.IsAnisotropicFilteringSupported(),
         .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
         .compareEnable = false,
         .compareOp = vk::CompareOp::eAlways,

@@ -167,27 +167,7 @@ void RendererVulkan::PrepareRendertarget() {
         LCD::Read(color_fill.raw, lcd_color_addr);
 
         if (color_fill.is_enabled) {
-            TextureInfo& texture = screen_infos[i].texture;
-            runtime.Transition(texture.alloc, vk::ImageLayout::eTransferDstOptimal, 0,
-                               texture.alloc.levels);
-
-            scheduler.Record([image = texture.alloc.image,
-                              color_fill](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-                const vk::ClearColorValue clear_color = {
-                    .float32 = std::array{color_fill.color_r / 255.0f, color_fill.color_g / 255.0f,
-                                          color_fill.color_b / 255.0f, 1.0f}};
-
-                const vk::ImageSubresourceRange range = {
-                    .aspectMask = vk::ImageAspectFlagBits::eColor,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1,
-                };
-
-                render_cmdbuf.clearColorImage(image, vk::ImageLayout::eTransferDstOptimal,
-                                              clear_color, range);
-            });
+            LoadColorToActiveVkTexture(color_fill.color_r, color_fill.color_g, color_fill.color_b, screen_infos[i].texture);
         } else {
             TextureInfo& texture = screen_infos[i].texture;
             if (texture.width != framebuffer.width || texture.height != framebuffer.height ||
@@ -217,7 +197,7 @@ void RendererVulkan::BeginRendering() {
         present_textures[i] = vk::DescriptorImageInfo{
             .imageView = info.display_texture ? info.display_texture->image_view
                                               : info.texture.alloc.image_view,
-            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
+            .imageLayout = vk::ImageLayout::eGeneral};
     }
 
     present_textures[3] = vk::DescriptorImageInfo{.sampler = present_samplers[current_sampler]};
@@ -301,7 +281,7 @@ void RendererVulkan::CompileShaders() {
             .mipmapMode = vk::SamplerMipmapMode::eLinear,
             .addressModeU = vk::SamplerAddressMode::eClampToEdge,
             .addressModeV = vk::SamplerAddressMode::eClampToEdge,
-            .anisotropyEnable = true,
+            .anisotropyEnable = instance.IsAnisotropicFilteringSupported(),
             .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
             .compareEnable = false,
             .compareOp = vk::CompareOp::eAlways,
@@ -490,6 +470,55 @@ void RendererVulkan::ConfigureFramebufferTexture(TextureInfo& texture,
 
         runtime.Recycle(tag, std::move(old_texture.alloc));
     }
+}
+
+void RendererVulkan::LoadColorToActiveVkTexture(u8 color_r, u8 color_g, u8 color_b, const TextureInfo& texture) {
+    const vk::ClearColorValue clear_color = {
+            .float32 = std::array{color_r / 255.0f, color_g / 255.0f, color_b / 255.0f, 1.0f}};
+
+    renderpass_cache.ExitRenderpass();
+    scheduler.Record([image = texture.alloc.image,
+                             clear_color](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        const vk::ImageSubresourceRange range = {.aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = VK_REMAINING_MIP_LEVELS,
+                .baseArrayLayer = 0,
+                .layerCount = VK_REMAINING_ARRAY_LAYERS};
+
+        const vk::ImageMemoryBarrier pre_barrier = {
+                .srcAccessMask = vk::AccessFlagBits::eShaderRead |
+                                 vk::AccessFlagBits::eTransferRead,
+                .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
+                .oldLayout = vk::ImageLayout::eGeneral,
+                .newLayout = vk::ImageLayout::eTransferDstOptimal,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = image,
+                .subresourceRange = range
+        };
+
+        const vk::ImageMemoryBarrier post_barrier = {
+                .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+                .dstAccessMask = vk::AccessFlagBits::eShaderRead |
+                                 vk::AccessFlagBits::eTransferRead,
+                .oldLayout = vk::ImageLayout::eTransferDstOptimal,
+                .newLayout = vk::ImageLayout::eGeneral,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = image,
+                .subresourceRange = range
+        };
+
+        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
+                                      vk::PipelineStageFlagBits::eTransfer,
+                                      vk::DependencyFlagBits::eByRegion, {}, {}, pre_barrier);
+
+        render_cmdbuf.clearColorImage(image, vk::ImageLayout::eTransferDstOptimal, clear_color, range);
+
+        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                                      vk::PipelineStageFlagBits::eAllCommands,
+                                      vk::DependencyFlagBits::eByRegion, {}, {}, post_barrier);
+    });
 }
 
 void RendererVulkan::ReloadSampler() {
@@ -857,14 +886,21 @@ void RendererVulkan::SwapBuffers() {
         render_cmdbuf.setScissor(0, scissor);
     });
 
+    DrawScreens(layout, false);
+
     renderpass_cache.ExitRenderpass();
 
-    for (auto& info : screen_infos) {
-        ImageAlloc* alloc = info.display_texture ? info.display_texture : &info.texture.alloc;
-        runtime.Transition(*alloc, vk::ImageLayout::eShaderReadOnlyOptimal, 0, alloc->levels);
-    }
+    scheduler.Record([](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        const vk::MemoryBarrier memory_write_barrier = {
+                .srcAccessMask = vk::AccessFlagBits::eMemoryWrite,
+                .dstAccessMask = vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite,
+        };
 
-    DrawScreens(layout, false);
+        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
+                                      vk::PipelineStageFlagBits::eAllCommands,
+                                      vk::DependencyFlagBits::eByRegion,
+                                      memory_write_barrier, {}, {});
+    });
 
     const vk::Semaphore image_acquired = swapchain.GetImageAcquiredSemaphore();
     const vk::Semaphore present_ready = swapchain.GetPresentReadySemaphore();

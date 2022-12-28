@@ -90,6 +90,21 @@ public:
         return !features.logicOp;
     }
 
+    bool UseGeometryShaders() const {
+#ifndef __ANDROID__
+        return features.geometryShader;
+#else
+        // Geometry shaders are extremely expensive on tilers to avoid them at all
+        // cost even if it hurts accuracy somewhat. TODO: Make this an option
+        return false;
+#endif
+    }
+
+    /// Returns true if anisotropic filtering is supported
+    bool IsAnisotropicFilteringSupported() const {
+        return features.samplerAnisotropy;
+    }
+
     /// Returns true when VK_KHR_timeline_semaphore is supported
     bool IsTimelineSemaphoreSupported() const {
         return timeline_semaphores;

@@ -66,6 +66,7 @@ void Swapchain::Create() {
         .queueFamilyIndexCount = queue_family_indices_count,
         .pQueueFamilyIndices = queue_family_indices.data(),
         .preTransform = transform,
+        .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eInherit,
         .presentMode = present_mode,
         .clipped = true,
         .oldSwapchain = swapchain};

@@ -165,9 +165,7 @@ struct PicaShaderConfigCommon {
     // output_map[output register index] -> output attribute index
     std::array<u32, 16> output_map;
 
-
-
-
+    bool use_geometry_shader;
     u32 vs_output_attributes;
     u32 gs_output_attributes;
 

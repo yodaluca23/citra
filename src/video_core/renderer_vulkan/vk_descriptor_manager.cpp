@@ -34,7 +34,7 @@ constexpr static std::array RASTERIZER_SETS = {
                           vk::DescriptorType::eStorageImage, vk::DescriptorType::eStorageImage,
                           vk::DescriptorType::eStorageImage, vk::DescriptorType::eStorageImage,
                           vk::DescriptorType::eStorageImage},
-             .binding_count = 7}};
+             .binding_count = 4}};
 
 constexpr vk::ShaderStageFlags ToVkStageFlags(vk::DescriptorType type) {
     vk::ShaderStageFlags flags;
