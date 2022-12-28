@@ -125,6 +125,11 @@ public:
         return custom_border_color;
     }
 
+    /// Returns true when VK_EXT_index_type_uint8 is supported
+    bool IsIndexTypeUint8Supported() const {
+        return index_type_uint8;
+    }
+
     /// Returns the vendor ID of the physical device
     u32 GetVendorID() const {
         return properties.vendorID;
@@ -210,12 +215,14 @@ private:
     std::vector<std::string> available_extensions;
     u32 present_queue_family_index{0};
     u32 graphics_queue_family_index{0};
-    bool timeline_semaphores{false};
-    bool extended_dynamic_state{false};
-    bool push_descriptors{false};
-    bool custom_border_color{false};
-    bool enable_validation{false};
-    bool dump_command_buffers{false};
+
+    bool timeline_semaphores{};
+    bool extended_dynamic_state{};
+    bool push_descriptors{};
+    bool custom_border_color{};
+    bool index_type_uint8{};
+    bool enable_validation{};
+    bool dump_command_buffers{};
 };
 
 } // namespace Vulkan

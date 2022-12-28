@@ -663,16 +663,6 @@ bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
         render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
                                       vk::PipelineStageFlagBits::eAllCommands,
                                       vk::DependencyFlagBits::eByRegion, {}, {}, post_barriers);
-
-        const vk::MemoryBarrier memory_write_barrier = {
-                .srcAccessMask = vk::AccessFlagBits::eMemoryWrite,
-                .dstAccessMask = vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite,
-        };
-
-        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
-                                      vk::PipelineStageFlagBits::eAllCommands,
-                                      vk::DependencyFlagBits::eByRegion,
-                                      memory_write_barrier, {}, {});
     });
 
     return true;
@@ -790,17 +780,6 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
         render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
                                       vk::PipelineStageFlagBits::eAllCommands,
                                       vk::DependencyFlagBits::eByRegion, {}, {}, write_barriers);
-
-        const vk::MemoryBarrier memory_write_barrier = {
-                .srcAccessMask = vk::AccessFlagBits::eMemoryWrite,
-                .dstAccessMask = vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite,
-        };
-
-        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
-                                      vk::PipelineStageFlagBits::eAllCommands,
-                                      vk::DependencyFlagBits::eByRegion,
-                                      memory_write_barrier, {}, {});
-
     });
 
     return true;
@@ -983,16 +962,6 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
             render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
                                           vk::PipelineStageFlagBits::eAllCommands,
                                           vk::DependencyFlagBits::eByRegion, {}, {}, write_barrier);
-
-            const vk::MemoryBarrier memory_write_barrier = {
-                    .srcAccessMask = vk::AccessFlagBits::eMemoryWrite,
-                    .dstAccessMask = vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite,
-            };
-
-            render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
-                                          vk::PipelineStageFlagBits::eAllCommands,
-                                          vk::DependencyFlagBits::eByRegion,
-                                          memory_write_barrier, {}, {});
         });
 
         runtime.upload_buffer.Commit(staging.size);

@@ -80,7 +80,7 @@ void Scheduler::WaitWorker() {
 }
 
 void Scheduler::DispatchWork() {
-    if (chunk->Empty()) {
+    if (!use_worker_thread || chunk->Empty()) {
         return;
     }
 
@@ -133,26 +133,26 @@ void Scheduler::AllocateWorkerCommandBuffers() {
 
 MICROPROFILE_DEFINE(Vulkan_Submit, "Vulkan", "Submit Exectution", MP_RGB(255, 192, 255));
 void Scheduler::SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wait_semaphore) {
-    renderer.FlushBuffers();
+    const auto handle = master_semaphore.Handle();
     const u64 signal_value = master_semaphore.NextTick();
     state = StateFlags::AllDirty;
+    renderer.FlushBuffers();
 
     renderpass_cache.ExitRenderpass();
-    Record([signal_semaphore, wait_semaphore, signal_value, this](vk::CommandBuffer render_cmdbuf,
-                                                                  vk::CommandBuffer upload_cmdbuf) {
+    Record([signal_semaphore, wait_semaphore,
+            handle, signal_value, this](vk::CommandBuffer render_cmdbuf,
+                                        vk::CommandBuffer upload_cmdbuf) {
         MICROPROFILE_SCOPE(Vulkan_Submit);
         upload_cmdbuf.end();
         render_cmdbuf.end();
 
-        const vk::Semaphore timeline_semaphore = master_semaphore.Handle();
-
         const u32 num_signal_semaphores = signal_semaphore ? 2U : 1U;
         const std::array signal_values{signal_value, u64(0)};
-        const std::array signal_semaphores{timeline_semaphore, signal_semaphore};
+        const std::array signal_semaphores{handle, signal_semaphore};
 
         const u32 num_wait_semaphores = wait_semaphore ? 2U : 1U;
         const std::array wait_values{signal_value - 1, u64(1)};
-        const std::array wait_semaphores{timeline_semaphore, wait_semaphore};
+        const std::array wait_semaphores{handle, wait_semaphore};
 
         static constexpr std::array<vk::PipelineStageFlags, 2> wait_stage_masks = {
             vk::PipelineStageFlagBits::eAllCommands,

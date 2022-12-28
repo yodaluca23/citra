@@ -5,6 +5,8 @@
 
 #include <atomic>
 #include <limits>
+#include <deque>
+#include <vector>
 #include <thread>
 #include "common/common_types.h"
 #include "video_core/renderer_vulkan/vk_common.h"

@@ -888,7 +888,7 @@ void RendererVulkan::SwapBuffers() {
 
     DrawScreens(layout, false);
 
-    renderpass_cache.ExitRenderpass();
+    /*renderpass_cache.ExitRenderpass();
 
     scheduler.Record([](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
         const vk::MemoryBarrier memory_write_barrier = {
@@ -900,7 +900,7 @@ void RendererVulkan::SwapBuffers() {
                                       vk::PipelineStageFlagBits::eAllCommands,
                                       vk::DependencyFlagBits::eByRegion,
                                       memory_write_barrier, {}, {});
-    });
+    });*/
 
     const vk::Semaphore image_acquired = swapchain.GetImageAcquiredSemaphore();
     const vk::Semaphore present_ready = swapchain.GetPresentReadySemaphore();

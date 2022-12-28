@@ -164,7 +164,7 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
     // Enable the instance extensions the backend uses
-    auto extensions = GetInstanceExtensions(window_info.type, false);
+    auto extensions = GetInstanceExtensions(window_info.type, enable_validation);
 
     // Use required platform-specific flags
     auto flags = GetInstanceFlags();
@@ -350,12 +350,12 @@ bool Instance::CreateDevice() {
         physical_device.getFeatures2<vk::PhysicalDeviceFeatures2,
                                      vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
                                      vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR,
-                                     vk::PhysicalDeviceCustomBorderColorFeaturesEXT>();
+                                     vk::PhysicalDeviceCustomBorderColorFeaturesEXT,
+                                     vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>();
 
     // Not having geometry shaders will cause issues with accelerated rendering.
-    const vk::PhysicalDeviceFeatures available = feature_chain.get().features;
-    features = available;
-    if (!available.geometryShader) {
+    features = feature_chain.get().features;
+    if (!features.geometryShader) {
         LOG_WARNING(Render_Vulkan,
                     "Geometry shaders not availabe! Accelerated rendering not possible!");
     }
@@ -390,6 +390,7 @@ bool Instance::CreateDevice() {
     extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     push_descriptors = AddExtension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
     custom_border_color = AddExtension(VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
+    index_type_uint8 = AddExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME);
 
     // Search queue families for graphics and present queues
     auto family_properties = physical_device.getQueueFamilyProperties();
@@ -446,21 +447,21 @@ bool Instance::CreateDevice() {
             .ppEnabledExtensionNames = enabled_extensions.data(),
         },
         vk::PhysicalDeviceFeatures2{
-            .features = {.robustBufferAccess = available.robustBufferAccess,
-                         .geometryShader = available.geometryShader,
-                         .dualSrcBlend = available.dualSrcBlend,
-                         .logicOp = available.logicOp,
-                         .depthClamp = available.depthClamp,
-                         .largePoints = available.largePoints,
-                         .samplerAnisotropy = available.samplerAnisotropy,
-                         .fragmentStoresAndAtomics = available.fragmentStoresAndAtomics,
-                         .shaderStorageImageMultisample = available.shaderStorageImageMultisample,
-                         .shaderClipDistance = available.shaderClipDistance}},
-        vk::PhysicalDeviceIndexTypeUint8FeaturesEXT{.indexTypeUint8 = true},
-        //feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
+            .features = {.robustBufferAccess = features.robustBufferAccess,
+                         .geometryShader = features.geometryShader,
+                         .dualSrcBlend = features.dualSrcBlend,
+                         .logicOp = features.logicOp,
+                         .depthClamp = features.depthClamp,
+                         .largePoints = features.largePoints,
+                         .samplerAnisotropy = features.samplerAnisotropy,
+                         .fragmentStoresAndAtomics = features.fragmentStoresAndAtomics,
+                         .shaderStorageImageMultisample = features.shaderStorageImageMultisample,
+                         .shaderClipDistance = features.shaderClipDistance}},
+        feature_chain.get<vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>(),
+        feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
         feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>(),
-        //feature_chain.get<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>()
-                };
+        feature_chain.get<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>()
+    };
 
     // Create logical device
     try {
