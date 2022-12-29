@@ -164,7 +164,7 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
     // Enable the instance extensions the backend uses
-    auto extensions = GetInstanceExtensions(window_info.type, enable_validation);
+    auto extensions = GetInstanceExtensions(window_info.type, false);
 
     // Use required platform-specific flags
     auto flags = GetInstanceFlags();

@@ -562,7 +562,7 @@ void RendererVulkan::LoadColorToActiveVkTexture(u8 color_r, u8 color_g, u8 color
             .subresourceRange = range,
         };
 
-        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
+        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eFragmentShader,
                                       vk::PipelineStageFlagBits::eTransfer,
                                       vk::DependencyFlagBits::eByRegion, {}, {}, pre_barrier);
 
@@ -570,7 +570,7 @@ void RendererVulkan::LoadColorToActiveVkTexture(u8 color_r, u8 color_g, u8 color
                                       range);
 
         render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                                      vk::PipelineStageFlagBits::eAllCommands,
+                                      vk::PipelineStageFlagBits::eFragmentShader,
                                       vk::DependencyFlagBits::eByRegion, {}, {}, post_barrier);
     });
 }
