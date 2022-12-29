@@ -19,13 +19,13 @@
 
 static bool IsPortraitMode() {
     return JNI_FALSE != IDCache::GetEnvForThread()->CallStaticBooleanMethod(
-            IDCache::GetNativeLibraryClass(), IDCache::GetIsPortraitMode());
+                            IDCache::GetNativeLibraryClass(), IDCache::GetIsPortraitMode());
 }
 
 static void UpdateLandscapeScreenLayout() {
     Settings::values.layout_option =
-            static_cast<Settings::LayoutOption>(IDCache::GetEnvForThread()->CallStaticIntMethod(
-                    IDCache::GetNativeLibraryClass(), IDCache::GetLandscapeScreenLayout()));
+        static_cast<Settings::LayoutOption>(IDCache::GetEnvForThread()->CallStaticIntMethod(
+            IDCache::GetNativeLibraryClass(), IDCache::GetLandscapeScreenLayout()));
 }
 
 void EmuWindow_Android_Vulkan::OnSurfaceChanged(ANativeWindow* surface) {

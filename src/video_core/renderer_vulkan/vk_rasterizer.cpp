@@ -26,17 +26,23 @@ constexpr u32 INDEX_BUFFER_SIZE = 16 * 1024 * 1024;
 constexpr u32 UNIFORM_BUFFER_SIZE = 16 * 1024 * 1024;
 constexpr u32 TEXTURE_BUFFER_SIZE = 512 * 1024;
 
-constexpr std::array TEXTURE_BUFFER_LF_FORMATS = {vk::Format::eR32G32Sfloat};
+constexpr std::array TEXTURE_BUFFER_LF_FORMATS = {
+    vk::Format::eR32G32Sfloat,
+};
 
-constexpr std::array TEXTURE_BUFFER_FORMATS = {vk::Format::eR32G32Sfloat,
-                                               vk::Format::eR32G32B32A32Sfloat};
+constexpr std::array TEXTURE_BUFFER_FORMATS = {
+    vk::Format::eR32G32Sfloat,
+    vk::Format::eR32G32B32A32Sfloat,
+};
 
-constexpr VideoCore::SurfaceParams NULL_PARAMS = {.width = 1,
-                                                  .height = 1,
-                                                  .stride = 1,
-                                                  .texture_type = VideoCore::TextureType::Texture2D,
-                                                  .pixel_format = VideoCore::PixelFormat::RGBA8,
-                                                  .type = VideoCore::SurfaceType::Color};
+constexpr VideoCore::SurfaceParams NULL_PARAMS = {
+    .width = 1,
+    .height = 1,
+    .stride = 1,
+    .texture_type = VideoCore::TextureType::Texture2D,
+    .pixel_format = VideoCore::PixelFormat::RGBA8,
+    .type = VideoCore::SurfaceType::Color,
+};
 
 constexpr vk::ImageUsageFlags NULL_USAGE = vk::ImageUsageFlagBits::eSampled |
                                            vk::ImageUsageFlagBits::eTransferSrc |
@@ -85,7 +91,8 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
         .min_filter = Pica::TexturingRegs::TextureConfig::TextureFilter::Linear,
         .mip_filter = Pica::TexturingRegs::TextureConfig::TextureFilter::Linear,
         .wrap_s = Pica::TexturingRegs::TextureConfig::WrapMode::ClampToBorder,
-        .wrap_t = Pica::TexturingRegs::TextureConfig::WrapMode::ClampToBorder};
+        .wrap_t = Pica::TexturingRegs::TextureConfig::WrapMode::ClampToBorder,
+    };
 
     default_sampler = CreateSampler(default_sampler_info);
 
@@ -265,8 +272,8 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     SetupFixedAttribs();
 
     // Bind the generated bindings
-    scheduler.Record([this, vertex_offsets = binding_offsets](
-                         vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+    scheduler.Record([this, vertex_offsets = binding_offsets](vk::CommandBuffer render_cmdbuf,
+                                                              vk::CommandBuffer) {
         render_cmdbuf.bindVertexBuffers(0, vertex_buffers, vertex_offsets);
     });
 }
@@ -435,8 +442,8 @@ void RasterizerVulkan::SetupIndexArray() {
 
     index_buffer.Commit(index_buffer_size);
 
-    scheduler.Record([this, index_offset = index_offset, index_type = index_type](
-                      vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+    scheduler.Record([this, index_offset = index_offset,
+                      index_type = index_type](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
         render_cmdbuf.bindIndexBuffer(index_buffer.GetHandle(), index_offset, index_type);
     });
 }
@@ -548,15 +555,17 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         // nothing. Always sample from the base level until mipmaps for texture cubes are
         // implemented
         const bool skip_mipmap = config.type == Pica::TexturingRegs::TextureConfig::TextureCube;
-        info = SamplerInfo{.mag_filter = config.mag_filter,
-                           .min_filter = config.min_filter,
-                           .mip_filter = config.mip_filter,
-                           .wrap_s = config.wrap_s,
-                           .wrap_t = config.wrap_t,
-                           .border_color = config.border_color.raw,
-                           .lod_min = skip_mipmap ? 0.f : static_cast<float>(config.lod.min_level),
-                           .lod_max = skip_mipmap ? 0.f : static_cast<float>(config.lod.max_level),
-                           .lod_bias = static_cast<float>(config.lod.bias)};
+        info = SamplerInfo{
+            .mag_filter = config.mag_filter,
+            .min_filter = config.min_filter,
+            .mip_filter = config.mip_filter,
+            .wrap_s = config.wrap_s,
+            .wrap_t = config.wrap_t,
+            .border_color = config.border_color.raw,
+            .lod_min = skip_mipmap ? 0.f : static_cast<float>(config.lod.min_level),
+            .lod_max = skip_mipmap ? 0.f : static_cast<float>(config.lod.max_level),
+            .lod_bias = static_cast<float>(config.lod.bias),
+        };
 
         // Search the cache and bind the appropriate sampler
         if (auto it = samplers.find(info); it != samplers.end()) {
@@ -711,7 +720,8 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         .renderpass = renderpass_cache.GetRenderpass(pipeline_info.color_attachment,
                                                      pipeline_info.depth_attachment, false),
         .width = width,
-        .height = height};
+        .height = height,
+    };
 
     auto [it, new_framebuffer] = framebuffers.try_emplace(framebuffer_info, vk::Framebuffer{});
     if (new_framebuffer) {
@@ -721,9 +731,11 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     const RenderpassState renderpass_info = {
         .renderpass = framebuffer_info.renderpass,
         .framebuffer = it->second,
-        .render_area = vk::Rect2D{.offset = {static_cast<s32>(draw_rect.left),
-                                             static_cast<s32>(draw_rect.bottom)},
-                                  .extent = {draw_rect.GetWidth(), draw_rect.GetHeight()}},
+        .render_area =
+            vk::Rect2D{
+                .offset = {static_cast<s32>(draw_rect.left), static_cast<s32>(draw_rect.bottom)},
+                .extent = {draw_rect.GetWidth(), draw_rect.GetHeight()},
+            },
         .clear = {},
     };
 
@@ -1086,8 +1098,11 @@ vk::Sampler RasterizerVulkan::CreateSampler(const SamplerInfo& info) {
     const auto color = PicaToVK::ColorRGBA8(info.border_color);
     const vk::SamplerCustomBorderColorCreateInfoEXT border_color_info = {
         .customBorderColor =
-            vk::ClearColorValue{.float32 = std::array{color[0], color[1], color[2], color[3]}},
-        .format = vk::Format::eUndefined};
+            vk::ClearColorValue{
+                .float32 = std::array{color[0], color[1], color[2], color[3]},
+            },
+        .format = vk::Format::eUndefined,
+    };
 
     const vk::SamplerCreateInfo sampler_info = {
         .pNext = use_border_color ? &border_color_info : nullptr,
@@ -1105,7 +1120,8 @@ vk::Sampler RasterizerVulkan::CreateSampler(const SamplerInfo& info) {
         .maxLod = info.lod_max,
         .borderColor =
             use_border_color ? vk::BorderColor::eFloatCustomEXT : vk::BorderColor::eIntOpaqueBlack,
-        .unnormalizedCoordinates = false};
+        .unnormalizedCoordinates = false,
+    };
 
     vk::Device device = instance.GetDevice();
     return device.createSampler(sampler_info);
@@ -1123,12 +1139,14 @@ vk::Framebuffer RasterizerVulkan::CreateFramebuffer(const FramebufferInfo& info)
         attachments[attachment_count++] = info.depth;
     }
 
-    const vk::FramebufferCreateInfo framebuffer_info = {.renderPass = info.renderpass,
-                                                        .attachmentCount = attachment_count,
-                                                        .pAttachments = attachments.data(),
-                                                        .width = info.width,
-                                                        .height = info.height,
-                                                        .layers = 1};
+    const vk::FramebufferCreateInfo framebuffer_info = {
+        .renderPass = info.renderpass,
+        .attachmentCount = attachment_count,
+        .pAttachments = attachments.data(),
+        .width = info.width,
+        .height = info.height,
+        .layers = 1,
+    };
 
     vk::Device device = instance.GetDevice();
     return device.createFramebuffer(framebuffer_info);

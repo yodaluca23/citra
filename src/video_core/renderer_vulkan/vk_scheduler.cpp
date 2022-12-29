@@ -139,9 +139,8 @@ void Scheduler::SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wa
     renderer.FlushBuffers();
 
     renderpass_cache.ExitRenderpass();
-    Record([signal_semaphore, wait_semaphore,
-            handle, signal_value, this](vk::CommandBuffer render_cmdbuf,
-                                        vk::CommandBuffer upload_cmdbuf) {
+    Record([signal_semaphore, wait_semaphore, handle, signal_value,
+            this](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer upload_cmdbuf) {
         MICROPROFILE_SCOPE(Vulkan_Submit);
         upload_cmdbuf.end();
         render_cmdbuf.end();

@@ -150,8 +150,8 @@ struct PicaFSConfig : Common::HashableStruct<PicaFSConfigState> {
  * PICA vertex/geometry shader.
  */
 struct PicaShaderConfigCommon {
-    void Init(const Pica::RasterizerRegs& rasterizer,
-              const Pica::ShaderRegs& regs, Pica::Shader::ShaderSetup& setup);
+    void Init(const Pica::RasterizerRegs& rasterizer, const Pica::ShaderRegs& regs,
+              Pica::Shader::ShaderSetup& setup);
 
     u64 program_hash;
     u64 swizzle_hash;
@@ -183,8 +183,8 @@ struct PicaShaderConfigCommon {
  * shader.
  */
 struct PicaVSConfig : Common::HashableStruct<PicaShaderConfigCommon> {
-    explicit PicaVSConfig(const Pica::RasterizerRegs& rasterizer,
-                          const Pica::ShaderRegs& regs, Pica::Shader::ShaderSetup& setup) {
+    explicit PicaVSConfig(const Pica::RasterizerRegs& rasterizer, const Pica::ShaderRegs& regs,
+                          Pica::Shader::ShaderSetup& setup) {
         state.Init(rasterizer, regs, setup);
     }
     explicit PicaVSConfig(const PicaShaderConfigCommon& conf) {

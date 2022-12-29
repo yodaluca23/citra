@@ -76,15 +76,17 @@ vk::Format ToVkFormat(VideoCore::PixelFormat format) {
 }
 
 [[nodiscard]] vk::DebugUtilsMessengerCreateInfoEXT MakeDebugUtilsMessengerInfo() {
-    return {.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
-                               vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
-                               vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-                               vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose,
-            .messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-                           vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
-                           vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding |
-                           vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
-            .pfnUserCallback = DebugHandler};
+    return vk::DebugUtilsMessengerCreateInfoEXT{
+        .messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
+                           vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
+                           vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+                           vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose,
+        .messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+                       vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
+                       vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding |
+                       vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
+        .pfnUserCallback = DebugHandler,
+    };
 }
 
 std::vector<std::string> GetSupportedExtensions(vk::PhysicalDevice physical) {
@@ -99,7 +101,6 @@ std::vector<std::string> GetSupportedExtensions(vk::PhysicalDevice physical) {
 
 Instance::Instance(bool validation, bool dump_command_buffers)
     : enable_validation{validation}, dump_command_buffers{dump_command_buffers} {
-    // Fetch instance independant function pointers
     auto vkGetInstanceProcAddr =
         dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
@@ -110,19 +111,16 @@ Instance::Instance(bool validation, bool dump_command_buffers)
     // Use required platform-specific flags
     auto flags = GetInstanceFlags();
 
-    const vk::ApplicationInfo application_info = {.pApplicationName = "Citra",
-                                                  .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
-                                                  .pEngineName = "Citra Vulkan",
-                                                  .engineVersion = VK_MAKE_VERSION(1, 0, 0),
-                                                  .apiVersion = VK_API_VERSION_1_0};
+    const vk::ApplicationInfo application_info = {
+        .pApplicationName = "Citra",
+        .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+        .pEngineName = "Citra Vulkan",
+        .engineVersion = VK_MAKE_VERSION(1, 0, 0),
+        .apiVersion = VK_API_VERSION_1_0,
+    };
 
-    std::array<const char*, 3> layers;
-#ifdef ANDROID
-    u32 layer_count = 1;
-    layers[0] = "VK_LAYER_KHRONOS_timeline_semaphore";
-#else
+    std::array<const char*, 2> layers;
     u32 layer_count = 0;
-#endif
 
     if (enable_validation) {
         layers[layer_count++] = "VK_LAYER_KHRONOS_validation";
@@ -132,13 +130,15 @@ Instance::Instance(bool validation, bool dump_command_buffers)
     }
 
     const vk::StructureChain instance_chain = {
-        vk::InstanceCreateInfo{.flags = flags,
-                               .pApplicationInfo = &application_info,
-                               .enabledLayerCount = layer_count,
-                               .ppEnabledLayerNames = layers.data(),
-                               .enabledExtensionCount = static_cast<u32>(extensions.size()),
-                               .ppEnabledExtensionNames = extensions.data()},
-        MakeDebugUtilsMessengerInfo()};
+        vk::InstanceCreateInfo{
+            .flags = flags,
+            .pApplicationInfo = &application_info,
+            .enabledLayerCount = layer_count,
+            .ppEnabledLayerNames = layers.data(),
+            .enabledExtensionCount = static_cast<u32>(extensions.size()),
+            .ppEnabledExtensionNames = extensions.data(),
+        },
+    };
 
     instance = vk::createInstance(instance_chain.get());
 
@@ -156,7 +156,7 @@ Instance::Instance(bool validation, bool dump_command_buffers)
 Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
     : enable_validation{Settings::values.renderer_debug},
       dump_command_buffers{Settings::values.dump_command_buffers} {
-    auto window_info = window.GetWindowInfo();
+    const Frontend::EmuWindow::WindowSystemInfo window_info = window.GetWindowInfo();
 
     // Fetch instance independant function pointers
     auto vkGetInstanceProcAddr =
@@ -176,11 +176,13 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
         return;
     }
 
-    const vk::ApplicationInfo application_info = {.pApplicationName = "Citra",
-                                                  .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
-                                                  .pEngineName = "Citra Vulkan",
-                                                  .engineVersion = VK_MAKE_VERSION(1, 0, 0),
-                                                  .apiVersion = available_version};
+    const vk::ApplicationInfo application_info = {
+        .pApplicationName = "Citra",
+        .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+        .pEngineName = "Citra Vulkan",
+        .engineVersion = VK_MAKE_VERSION(1, 0, 0),
+        .apiVersion = available_version,
+    };
 
     std::array<const char*, 3> layers;
 #ifdef ANDROID
@@ -198,13 +200,16 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
     }
 
     const vk::StructureChain instance_chain = {
-        vk::InstanceCreateInfo{.flags = flags,
-                               .pApplicationInfo = &application_info,
-                               .enabledLayerCount = layer_count,
-                               .ppEnabledLayerNames = layers.data(),
-                               .enabledExtensionCount = static_cast<u32>(extensions.size()),
-                               .ppEnabledExtensionNames = extensions.data()},
-        MakeDebugUtilsMessengerInfo()};
+        vk::InstanceCreateInfo{
+            .flags = flags,
+            .pApplicationInfo = &application_info,
+            .enabledLayerCount = layer_count,
+            .ppEnabledLayerNames = layers.data(),
+            .enabledExtensionCount = static_cast<u32>(extensions.size()),
+            .ppEnabledExtensionNames = extensions.data(),
+        },
+        MakeDebugUtilsMessengerInfo(),
+    };
 
     try {
         instance = vk::createInstance(instance_chain.get());
@@ -335,13 +340,15 @@ void Instance::CreateFormatTable() {
         }
 
         const u32 index = static_cast<u32>(pixel_format);
-        format_table[index] = FormatTraits{.transfer_support = supports_transfer,
-                                           .blit_support = supports_blit,
-                                           .attachment_support = supports_attachment,
-                                           .storage_support = supports_storage,
-                                           .usage = best_usage,
-                                           .native = format,
-                                           .fallback = fallback};
+        format_table[index] = FormatTraits{
+            .transfer_support = supports_transfer,
+            .blit_support = supports_blit,
+            .attachment_support = supports_attachment,
+            .storage_support = supports_storage,
+            .usage = best_usage,
+            .native = format,
+            .fallback = fallback,
+        };
     }
 }
 
@@ -431,12 +438,17 @@ bool Instance::CreateDevice() {
     static constexpr float queue_priorities[] = {1.0f};
 
     const std::array queue_infos = {
-        vk::DeviceQueueCreateInfo{.queueFamilyIndex = graphics_queue_family_index,
-                                  .queueCount = 1,
-                                  .pQueuePriorities = queue_priorities},
-        vk::DeviceQueueCreateInfo{.queueFamilyIndex = present_queue_family_index,
-                                  .queueCount = 1,
-                                  .pQueuePriorities = queue_priorities}};
+        vk::DeviceQueueCreateInfo{
+            .queueFamilyIndex = graphics_queue_family_index,
+            .queueCount = 1,
+            .pQueuePriorities = queue_priorities,
+        },
+        vk::DeviceQueueCreateInfo{
+            .queueFamilyIndex = present_queue_family_index,
+            .queueCount = 1,
+            .pQueuePriorities = queue_priorities,
+        },
+    };
 
     const u32 queue_count = graphics_queue_family_index != present_queue_family_index ? 2u : 1u;
     const vk::StructureChain device_chain = {
@@ -447,23 +459,25 @@ bool Instance::CreateDevice() {
             .ppEnabledExtensionNames = enabled_extensions.data(),
         },
         vk::PhysicalDeviceFeatures2{
-            .features = {.robustBufferAccess = features.robustBufferAccess,
-                         .geometryShader = features.geometryShader,
-                         .dualSrcBlend = features.dualSrcBlend,
-                         .logicOp = features.logicOp,
-                         .depthClamp = features.depthClamp,
-                         .largePoints = features.largePoints,
-                         .samplerAnisotropy = features.samplerAnisotropy,
-                         .fragmentStoresAndAtomics = features.fragmentStoresAndAtomics,
-                         .shaderStorageImageMultisample = features.shaderStorageImageMultisample,
-                         .shaderClipDistance = features.shaderClipDistance}},
+            .features =
+                {
+                    .robustBufferAccess = features.robustBufferAccess,
+                    .geometryShader = features.geometryShader,
+                    .dualSrcBlend = features.dualSrcBlend,
+                    .logicOp = features.logicOp,
+                    .depthClamp = features.depthClamp,
+                    .largePoints = features.largePoints,
+                    .samplerAnisotropy = features.samplerAnisotropy,
+                    .fragmentStoresAndAtomics = features.fragmentStoresAndAtomics,
+                    .shaderStorageImageMultisample = features.shaderStorageImageMultisample,
+                    .shaderClipDistance = features.shaderClipDistance,
+                },
+        },
         feature_chain.get<vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>(),
         feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
         feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>(),
-        feature_chain.get<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>()
-    };
+        feature_chain.get<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>()};
 
-    // Create logical device
     try {
         device = physical_device.createDevice(device_chain.get());
     } catch (vk::ExtensionNotPresentError& err) {
@@ -484,13 +498,16 @@ bool Instance::CreateDevice() {
 void Instance::CreateAllocator() {
     const VmaVulkanFunctions functions = {
         .vkGetInstanceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetInstanceProcAddr,
-        .vkGetDeviceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceProcAddr};
+        .vkGetDeviceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceProcAddr,
+    };
 
-    const VmaAllocatorCreateInfo allocator_info = {.physicalDevice = physical_device,
-                                                   .device = device,
-                                                   .pVulkanFunctions = &functions,
-                                                   .instance = instance,
-                                                   .vulkanApiVersion = VK_API_VERSION_1_1};
+    const VmaAllocatorCreateInfo allocator_info = {
+        .physicalDevice = physical_device,
+        .device = device,
+        .pVulkanFunctions = &functions,
+        .instance = instance,
+        .vulkanApiVersion = VK_API_VERSION_1_1,
+    };
 
     if (VkResult result = vmaCreateAllocator(&allocator_info, &allocator); result != VK_SUCCESS) {
         LOG_CRITICAL(Render_Vulkan, "Failed to initialize VMA with error {}", result);

@@ -1768,7 +1768,8 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
             out += fmt::format("vec4 vs_out_attr{};\n", i);
         }
 
-        const auto semantic = [&config = config.state](VSOutputAttributes::Semantic slot_semantic) -> std::string {
+        const auto semantic =
+            [&config = config.state](VSOutputAttributes::Semantic slot_semantic) -> std::string {
             const u32 slot = static_cast<u32>(slot_semantic);
             const u32 attrib = config.semantic_maps[slot].attribute_index;
             const u32 comp = config.semantic_maps[slot].component_index;
@@ -1795,8 +1796,9 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
         out += "    normquat = GetVertexQuaternion();\n";
 
         out += "    vec4 vtx_color = vec4(" + semantic(VSOutputAttributes::COLOR_R) + ", " +
-               semantic(VSOutputAttributes::COLOR_G) + ", " + semantic(VSOutputAttributes::COLOR_B) +
-               ", " + semantic(VSOutputAttributes::COLOR_A) + ");\n";
+               semantic(VSOutputAttributes::COLOR_G) + ", " +
+               semantic(VSOutputAttributes::COLOR_B) + ", " +
+               semantic(VSOutputAttributes::COLOR_A) + ");\n";
         out += "    primary_color = min(abs(vtx_color), vec4(1.0));\n\n";
 
         out += "    texcoord0 = vec2(" + semantic(VSOutputAttributes::TEXCOORD0_U) + ", " +

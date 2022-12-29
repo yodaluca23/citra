@@ -69,7 +69,8 @@ void Swapchain::Create() {
         .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eInherit,
         .presentMode = present_mode,
         .clipped = true,
-        .oldSwapchain = swapchain};
+        .oldSwapchain = swapchain,
+    };
 
     vk::Device device = instance.GetDevice();
     vk::SwapchainKHR new_swapchain = device.createSwapchainKHR(swapchain_info);
@@ -111,11 +112,14 @@ void Swapchain::AcquireNextImage() {
 MICROPROFILE_DEFINE(Vulkan_Present, "Vulkan", "Swapchain Present", MP_RGB(66, 185, 245));
 void Swapchain::Present() {
     scheduler.Record([this, index = image_index](vk::CommandBuffer, vk::CommandBuffer) {
-        const vk::PresentInfoKHR present_info = {.waitSemaphoreCount = 1,
-                                                 .pWaitSemaphores = &present_ready[index],
-                                                 .swapchainCount = 1,
-                                                 .pSwapchains = &swapchain,
-                                                 .pImageIndices = &index};
+        const vk::PresentInfoKHR present_info = {
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &present_ready[index],
+            .swapchainCount = 1,
+            .pSwapchains = &swapchain,
+            .pImageIndices = &index,
+        };
+
         MICROPROFILE_SCOPE(Vulkan_Present);
         vk::Queue present_queue = instance.GetPresentQueue();
         try {
@@ -135,8 +139,8 @@ void Swapchain::FindPresentFormat() {
     const std::vector<vk::SurfaceFormatKHR> formats =
         instance.GetPhysicalDevice().getSurfaceFormatsKHR(surface);
 
-        // If there is a single undefined surface format, the device doesn't care, so we'll just use
-        // RGBA
+    // If there is a single undefined surface format, the device doesn't care, so we'll just use
+    // RGBA
     if (formats[0].format == vk::Format::eUndefined) {
         surface_format.format = vk::Format::eR8G8B8A8Unorm;
         surface_format.colorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
@@ -233,11 +237,15 @@ void Swapchain::SetupImages() {
             .image = image,
             .viewType = vk::ImageViewType::e2D,
             .format = surface_format.format,
-            .subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eColor,
-                                 .baseMipLevel = 0,
-                                 .levelCount = 1,
-                                 .baseArrayLayer = 0,
-                                 .layerCount = 1}};
+            .subresourceRange =
+                {
+                    .aspectMask = vk::ImageAspectFlagBits::eColor,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+        };
 
         image_views.push_back(device.createImageView(view_info));
 
@@ -247,7 +255,8 @@ void Swapchain::SetupImages() {
             .pAttachments = &image_views.back(),
             .width = extent.width,
             .height = extent.height,
-            .layers = 1};
+            .layers = 1,
+        };
 
         framebuffers.push_back(device.createFramebuffer(framebuffer_info));
     }
