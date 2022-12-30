@@ -185,6 +185,11 @@ public:
         return limits.maxTexelBufferElements;
     }
 
+    /// Returns true if triangle fan is an accepted primitive topology
+    bool IsTriangleFanSupported() const {
+        return triangle_fan_supported;
+    }
+
 private:
     /// Returns the optimal supported usage for the requested format
     vk::FormatFeatureFlags GetFormatFeatures(vk::Format format);
@@ -222,6 +227,7 @@ private:
     u32 present_queue_family_index{0};
     u32 graphics_queue_family_index{0};
 
+    bool triangle_fan_supported{true};
     bool timeline_semaphores{};
     bool extended_dynamic_state{};
     bool push_descriptors{};

@@ -19,6 +19,8 @@
 
 namespace Vulkan {
 
+using TriangleTopology = Pica::PipelineRegs::TriangleTopology;
+
 constexpr u64 VERTEX_BUFFER_SIZE = 128 * 1024 * 1024;
 constexpr u64 TEXTURE_BUFFER_SIZE = 2 * 1024 * 1024;
 
@@ -391,8 +393,10 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
     const auto [vs_input_index_min, vs_input_index_max, vs_input_size] =
         AnalyzeVertexArray(is_indexed);
 
-    if (vs_input_size > VERTEX_BUFFER_SIZE) {
-        LOG_WARNING(Render_Vulkan, "Too large vertex input size {}", vs_input_size);
+    if (regs.pipeline.triangle_topology == TriangleTopology::Fan &&
+        !instance.IsTriangleFanSupported()) {
+        LOG_DEBUG(Render_Vulkan,
+                  "Skipping accelerated draw with unsupported triangle fan topology");
         return false;
     }
 
@@ -798,10 +802,10 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                                    depth_surface);
     }
 
-    static int submit_threshold = 20;
+    static int submit_threshold = 40;
     submit_threshold--;
     if (!submit_threshold) {
-        submit_threshold = 20;
+        submit_threshold = 40;
         scheduler.Flush();
     }
 
