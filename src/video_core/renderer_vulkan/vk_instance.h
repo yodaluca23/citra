@@ -177,7 +177,12 @@ public:
 
     /// Returns the minimum required alignment for uniforms
     vk::DeviceSize UniformMinAlignment() const {
-        return properties.limits.minUniformBufferOffsetAlignment;
+        return limits.minUniformBufferOffsetAlignment;
+    }
+
+    /// Returns the maximum supported elements in a texel buffer
+    u32 MaxTexelBufferElements() const {
+        return limits.maxTexelBufferElements;
     }
 
 private:
@@ -204,6 +209,7 @@ private:
     vk::SurfaceKHR surface;
     vk::PhysicalDeviceProperties properties;
     vk::PhysicalDeviceFeatures features;
+    vk::PhysicalDeviceLimits limits;
     vk::DriverIdKHR driver_id;
     vk::DebugUtilsMessengerEXT debug_messenger;
     std::string vendor_name;

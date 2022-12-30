@@ -238,6 +238,7 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
 
     physical_device = physical_devices[physical_device_index];
     properties = physical_device.getProperties();
+    limits = properties.limits;
 
     LOG_INFO(Render_Vulkan, "Creating logical device for physical device: {}",
              properties.deviceName);

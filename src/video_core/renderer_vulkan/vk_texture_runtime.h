@@ -15,13 +15,15 @@
 #include "video_core/renderer_vulkan/vk_layout_tracker.h"
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
 
+VK_DEFINE_HANDLE(VmaAllocation)
+
 namespace Vulkan {
 
 struct StagingData {
     vk::Buffer buffer;
     u32 size = 0;
     std::span<std::byte> mapped{};
-    u32 buffer_offset = 0;
+    u64 buffer_offset = 0;
 };
 
 struct ImageAlloc {
@@ -126,9 +128,6 @@ public:
 
     /// Generates mipmaps for all the available levels of the texture
     void GenerateMipmaps(Surface& surface, u32 max_level);
-
-    /// Flushes staging buffers
-    void FlushBuffers();
 
     /// Returns all source formats that support reinterpretation to the dest format
     [[nodiscard]] const ReinterpreterList& GetPossibleReinterpretations(
