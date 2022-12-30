@@ -12,7 +12,6 @@
 #include "video_core/renderer_vulkan/vk_blit_helper.h"
 #include "video_core/renderer_vulkan/vk_format_reinterpreter.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
-#include "video_core/renderer_vulkan/vk_layout_tracker.h"
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
 
 VK_DEFINE_HANDLE(VmaAllocation)
@@ -45,9 +44,6 @@ struct ImageAlloc {
     vk::ImageUsageFlags usage;
     vk::Format format;
     vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eColor;
-    u32 levels = 1;
-    u32 layers = 1;
-    LayoutTracker tracker;
 };
 
 struct HostTextureTag {

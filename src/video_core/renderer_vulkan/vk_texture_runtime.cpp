@@ -191,8 +191,6 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
 
     ImageAlloc alloc{};
     alloc.format = format;
-    alloc.levels = std::log2(std::max(width, height)) + 1;
-    alloc.layers = type == VideoCore::TextureType::CubeMap ? 6 : 1;
     alloc.aspect = GetImageAspect(format);
 
     // The internal format does not provide enough guarantee of texture uniqueness
@@ -214,6 +212,8 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
     }
 
     const bool create_storage_view = pixel_format == VideoCore::PixelFormat::RGBA8;
+    const u32 levels = std::log2(std::max(width, height)) + 1;
+    const u32 layers = type == VideoCore::TextureType::CubeMap ? 6 : 1;
 
     vk::ImageCreateFlags flags;
     if (type == VideoCore::TextureType::CubeMap) {
@@ -228,8 +228,8 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
         .imageType = vk::ImageType::e2D,
         .format = format,
         .extent = {width, height, 1},
-        .mipLevels = alloc.levels,
-        .arrayLayers = alloc.layers,
+        .mipLevels = levels,
+        .arrayLayers = layers,
         .samples = vk::SampleCountFlagBits::e1,
         .usage = usage,
     };
@@ -261,33 +261,31 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
         .image = alloc.image,
         .viewType = view_type,
         .format = format,
-        .subresourceRange =
-            {
-                .aspectMask = alloc.aspect,
-                .baseMipLevel = 0,
-                .levelCount = alloc.levels,
-                .baseArrayLayer = 0,
-                .layerCount = alloc.layers,
-            },
+        .subresourceRange{
+            .aspectMask = alloc.aspect,
+            .baseMipLevel = 0,
+            .levelCount = levels,
+            .baseArrayLayer = 0,
+            .layerCount = layers,
+        },
     };
 
     vk::Device device = instance.GetDevice();
     alloc.image_view = device.createImageView(view_info);
 
     // Also create a base mip view in case this is used as an attachment
-    if (alloc.levels > 1) [[likely]] {
+    if (levels > 1) [[likely]] {
         const vk::ImageViewCreateInfo base_view_info = {
             .image = alloc.image,
             .viewType = view_type,
             .format = format,
-            .subresourceRange =
-                {
-                    .aspectMask = alloc.aspect,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = alloc.layers,
-                },
+            .subresourceRange{
+                .aspectMask = alloc.aspect,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = layers,
+            },
         };
 
         alloc.base_view = device.createImageView(base_view_info);
@@ -299,14 +297,13 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
             .image = alloc.image,
             .viewType = view_type,
             .format = format,
-            .subresourceRange =
-                {
-                    .aspectMask = vk::ImageAspectFlagBits::eDepth,
-                    .baseMipLevel = 0,
-                    .levelCount = alloc.levels,
-                    .baseArrayLayer = 0,
-                    .layerCount = alloc.layers,
-                },
+            .subresourceRange{
+                .aspectMask = vk::ImageAspectFlagBits::eDepth,
+                .baseMipLevel = 0,
+                .levelCount = levels,
+                .baseArrayLayer = 0,
+                .layerCount = layers,
+            },
         };
 
         alloc.depth_view = device.createImageView(view_info);
@@ -319,14 +316,13 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
             .image = alloc.image,
             .viewType = view_type,
             .format = vk::Format::eR32Uint,
-            .subresourceRange =
-                {
-                    .aspectMask = alloc.aspect,
-                    .baseMipLevel = 0,
-                    .levelCount = alloc.levels,
-                    .baseArrayLayer = 0,
-                    .layerCount = alloc.layers,
-                },
+            .subresourceRange{
+                .aspectMask = alloc.aspect,
+                .baseMipLevel = 0,
+                .levelCount = levels,
+                .baseArrayLayer = 0,
+                .layerCount = layers,
+            },
         };
         alloc.storage_view = device.createImageView(storage_view_info);
     }
