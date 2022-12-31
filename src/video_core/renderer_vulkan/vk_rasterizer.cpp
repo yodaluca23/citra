@@ -285,9 +285,10 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     SetupFixedAttribs();
 
     // Bind the generated bindings
-    scheduler.Record([this, vertex_offsets = binding_offsets](vk::CommandBuffer render_cmdbuf,
-                                                              vk::CommandBuffer) {
-        render_cmdbuf.bindVertexBuffers(0, vertex_buffers, vertex_offsets);
+    scheduler.Record([this, binding_count = layout.binding_count, vertex_offsets = binding_offsets](
+                         vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        render_cmdbuf.bindVertexBuffers(0, binding_count, vertex_buffers.data(),
+                                        vertex_offsets.data());
     });
 }
 
