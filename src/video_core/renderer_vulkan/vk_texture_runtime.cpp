@@ -223,7 +223,15 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
         flags |= vk::ImageCreateFlagBits::eMutableFormat;
     }
 
+    const bool need_format_list = create_storage_view && instance.IsImageFormatListSupported();
+    const vk::Format storage_format = vk::Format::eR32Uint;
+    const vk::ImageFormatListCreateInfo image_format_list = {
+        .viewFormatCount = 1,
+        .pViewFormats = &storage_format,
+    };
+
     const vk::ImageCreateInfo image_info = {
+        .pNext = need_format_list ? &image_format_list : nullptr,
         .flags = flags,
         .imageType = vk::ImageType::e2D,
         .format = format,
