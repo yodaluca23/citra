@@ -338,6 +338,7 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
         alloc.storage_view = device.createImageView(storage_view_info);
     }
 
+    renderpass_cache.ExitRenderpass();
     scheduler.Record([image = alloc.image, aspect = alloc.aspect](vk::CommandBuffer cmdbuf) {
         const vk::ImageMemoryBarrier init_barrier = {
             .srcAccessMask = vk::AccessFlagBits::eNone,
