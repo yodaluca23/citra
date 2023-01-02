@@ -224,10 +224,13 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
     }
 
     const bool need_format_list = create_storage_view && instance.IsImageFormatListSupported();
-    const vk::Format storage_format = vk::Format::eR32Uint;
+    const std::array format_list = {
+        vk::Format::eR8G8B8A8Unorm,
+        vk::Format::eR32Uint,
+    };
     const vk::ImageFormatListCreateInfo image_format_list = {
-        .viewFormatCount = 1,
-        .pViewFormats = &storage_format,
+        .viewFormatCount = static_cast<u32>(format_list.size()),
+        .pViewFormats = format_list.data(),
     };
 
     const vk::ImageCreateInfo image_info = {
