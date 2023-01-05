@@ -1825,7 +1825,6 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
 
     out += program_source;
 
-    LOG_INFO(Render_Vulkan, "{}", out);
     return out;
 }
 
