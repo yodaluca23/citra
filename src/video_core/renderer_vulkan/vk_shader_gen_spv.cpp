@@ -624,7 +624,7 @@ Id FragmentModule::SampleTexture(u32 texture_unit) {
         const Id dx_dy_max{
             OpFMax(f32_id, OpCompositeExtract(f32_id, d, 0), OpCompositeExtract(f32_id, d, 1))};
         const Id lod{OpLog2(f32_id, dx_dy_max)};
-        const Id lod_bias{GetShaderDataMember(f32_id, ConstS32(29), ConstU32(texture_unit))};
+        const Id lod_bias{GetShaderDataMember(f32_id, ConstS32(28), ConstU32(texture_unit))};
         const Id biased_lod{OpFAdd(f32_id, lod, lod_bias)};
         return OpImageSampleExplicitLod(vec_ids.Get(4), sampled_image, texcoord,
                                         spv::ImageOperandsMask::Lod, biased_lod);
