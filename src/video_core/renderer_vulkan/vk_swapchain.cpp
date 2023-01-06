@@ -40,9 +40,13 @@ Swapchain::~Swapchain() {
     }
 }
 
-void Swapchain::Create() {
+void Swapchain::Create(vk::SurfaceKHR new_surface) {
     is_outdated = false;
     is_suboptimal = false;
+    if (new_surface) {
+        surface = new_surface;
+    }
+
     SetSurfaceProperties();
 
     const std::array queue_family_indices = {
@@ -73,8 +77,15 @@ void Swapchain::Create() {
     };
 
     vk::Device device = instance.GetDevice();
-    vk::SwapchainKHR new_swapchain = device.createSwapchainKHR(swapchain_info);
-    device.waitIdle();
+    vk::SwapchainKHR new_swapchain{};
+    try {
+        new_swapchain = device.createSwapchainKHR(swapchain_info);
+        device.waitIdle();
+    } catch (vk::SystemError& err) {
+        LOG_CRITICAL(Render_Vulkan, "{}", err.what());
+        UNREACHABLE();
+    }
+
     Destroy();
 
     swapchain = new_swapchain;
