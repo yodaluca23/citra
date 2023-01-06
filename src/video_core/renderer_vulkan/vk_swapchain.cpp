@@ -38,12 +38,15 @@ Swapchain::~Swapchain() {
     for (const vk::Semaphore semaphore : present_ready) {
         device.destroySemaphore(semaphore);
     }
+
+    instance.GetInstance().destroySurfaceKHR(surface);
 }
 
 void Swapchain::Create(vk::SurfaceKHR new_surface) {
     is_outdated = false;
     is_suboptimal = false;
     if (new_surface) {
+        instance.GetInstance().destroySurfaceKHR(surface);
         surface = new_surface;
     }
 
@@ -73,24 +76,21 @@ void Swapchain::Create(vk::SurfaceKHR new_surface) {
         .compositeAlpha = composite_alpha,
         .presentMode = present_mode,
         .clipped = true,
-        .oldSwapchain = swapchain,
+        .oldSwapchain = nullptr,
     };
 
     vk::Device device = instance.GetDevice();
-    vk::SwapchainKHR new_swapchain{};
+    device.waitIdle();
+    Destroy();
+
     try {
-        new_swapchain = device.createSwapchainKHR(swapchain_info);
-        device.waitIdle();
+        swapchain = device.createSwapchainKHR(swapchain_info);
     } catch (vk::SystemError& err) {
         LOG_CRITICAL(Render_Vulkan, "{}", err.what());
         UNREACHABLE();
     }
 
-    Destroy();
-
-    swapchain = new_swapchain;
     SetupImages();
-
     resource_ticks.clear();
     resource_ticks.resize(image_count);
 }

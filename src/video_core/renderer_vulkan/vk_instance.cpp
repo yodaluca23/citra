@@ -255,7 +255,6 @@ Instance::~Instance() {
     if (device) {
         vmaDestroyAllocator(allocator);
         device.destroy();
-        instance.destroySurfaceKHR(surface);
 
         if (debug_messenger) {
             instance.destroyDebugUtilsMessengerEXT(debug_messenger);
