@@ -113,6 +113,8 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
 
     // Since we don't have access to VK_EXT_descriptor_indexing we need to intiallize
     // all descriptor sets even the ones we don't use. Use default_texture for this
+    pipeline_cache.BindBuffer(0, stream_buffer.Handle(), 0, 1);
+    pipeline_cache.BindBuffer(1, stream_buffer.Handle(), 0, 1);
     pipeline_cache.BindTexelBuffer(2, texture_lf_view);
     pipeline_cache.BindTexelBuffer(3, texture_rg_view);
     pipeline_cache.BindTexelBuffer(4, texture_rgba_view);
