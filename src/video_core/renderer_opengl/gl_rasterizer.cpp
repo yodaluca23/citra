@@ -1372,9 +1372,11 @@ void RasterizerOpenGL::UploadUniforms(bool accelerate_draw) {
     }
 
     if (sync_fs || invalidate) {
-        std::memcpy(uniforms + used_bytes, &uniform_block_data.data, sizeof(Pica::Shader::UniformData));
-        glBindBufferRange(GL_UNIFORM_BUFFER, static_cast<GLuint>(Pica::Shader::UniformBindings::Common),
-                          uniform_buffer.GetHandle(), offset + used_bytes, sizeof(Pica::Shader::UniformData));
+        std::memcpy(uniforms + used_bytes, &uniform_block_data.data,
+                    sizeof(Pica::Shader::UniformData));
+        glBindBufferRange(
+            GL_UNIFORM_BUFFER, static_cast<GLuint>(Pica::Shader::UniformBindings::Common),
+            uniform_buffer.GetHandle(), offset + used_bytes, sizeof(Pica::Shader::UniformData));
         uniform_block_data.dirty = false;
         used_bytes += uniform_size_aligned_fs;
     }

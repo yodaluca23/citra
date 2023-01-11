@@ -766,8 +766,9 @@ void RasterizerAccelerated::SyncProcTexNoise() {
 
 void RasterizerAccelerated::SyncProcTexBias() {
     const auto& regs = Pica::g_state.regs.texturing;
-    const auto proctex_bias = Pica::float16::FromRaw(regs.proctex.bias_low |
-        (regs.proctex_lut.bias_high << 8)).ToFloat32();
+    const auto proctex_bias =
+        Pica::float16::FromRaw(regs.proctex.bias_low | (regs.proctex_lut.bias_high << 8))
+            .ToFloat32();
     if (proctex_bias != uniform_block_data.data.proctex_bias) {
         uniform_block_data.data.proctex_bias = proctex_bias;
         uniform_block_data.dirty = true;

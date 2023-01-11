@@ -1201,8 +1201,8 @@ void RasterizerVulkan::SyncLogicOp() {
 void RasterizerVulkan::SyncColorWriteMask() {
     const auto& regs = Pica::g_state.regs;
     const u32 color_mask = regs.framebuffer.framebuffer.allow_color_write != 0
-        ? (regs.framebuffer.output_merger.depth_color_mask >> 8) & 0xF
-        : 0;
+                               ? (regs.framebuffer.output_merger.depth_color_mask >> 8) & 0xF
+                               : 0;
 
     const bool is_logic_op_emulated =
         instance.NeedsLogicOpEmulation() && !regs.framebuffer.output_merger.alphablend_enable;

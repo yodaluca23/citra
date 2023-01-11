@@ -298,7 +298,7 @@ void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
             handle = fragment_shaders_spv.Get(config, instance.GetDevice());
         } else {
             handle = fragment_shaders_glsl.Get(config, vk::ShaderStageFlagBits::eFragment,
-                                               instance.GetDevice(), ShaderOptimization::High);
+                                               instance.GetDevice(), ShaderOptimization::Debug);
         }
 
         current_shaders[ProgramType::FS] = handle;

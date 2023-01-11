@@ -42,6 +42,9 @@ void FragmentModule::Generate() {
         return;
     }
 
+    // Check if the fragment is outside scissor rectangle
+    WriteScissor();
+
     // Write shader bytecode to emulate all enabled PICA lights
     if (config.state.lighting.enable) {
         WriteLighting();
@@ -56,9 +59,7 @@ void FragmentModule::Generate() {
         WriteTevStage(static_cast<s32>(index));
     }
 
-    if (WriteAlphaTestCondition(config.state.alpha_test_func)) {
-        return;
-    }
+    WriteAlphaTestCondition(config.state.alpha_test_func);
 
     if (config.state.fog_mode == TexturingRegs::FogMode::Gas) {
         Core::System::GetInstance().TelemetrySession().AddField(
@@ -122,6 +123,45 @@ void FragmentModule::WriteDepth() {
     } else {
         OpStore(gl_frag_depth_id, depth);
     }
+}
+
+void FragmentModule::WriteScissor() {
+    if (config.state.scissor_test_mode == RasterizerRegs::ScissorMode::Disabled) {
+        return;
+    }
+
+    const Id input_pointer_id{TypePointer(spv::StorageClass::Input, vec_ids.Get(4))};
+    const Id input_pointer{OpAccessChain(input_pointer_id, gl_frag_coord_id)};
+    const Id gl_frag_coord{OpLoad(vec_ids.Get(4), input_pointer)};
+    const Id gl_frag_coord_xy{OpVectorShuffle(vec_ids.Get(2), gl_frag_coord, gl_frag_coord, 0, 1)};
+
+    const Id scissor_x1{GetShaderDataMember(i32_id, ConstS32(6))};
+    const Id scissor_y1{GetShaderDataMember(i32_id, ConstS32(7))};
+    const Id scissor_1{OpCompositeConstruct(vec_ids.Get(2), OpConvertSToF(f32_id, scissor_x1),
+                                            OpConvertSToF(f32_id, scissor_y1))};
+
+    const Id scissor_x2{GetShaderDataMember(i32_id, ConstS32(8))};
+    const Id scissor_y2{GetShaderDataMember(i32_id, ConstS32(9))};
+    const Id scissor_2{OpCompositeConstruct(vec_ids.Get(2), OpConvertSToF(f32_id, scissor_x2),
+                                            OpConvertSToF(f32_id, scissor_y2))};
+
+    const Id cond1{OpFOrdGreaterThanEqual(bvec_ids.Get(2), gl_frag_coord_xy, scissor_1)};
+    const Id cond2{OpFOrdLessThan(bvec_ids.Get(2), gl_frag_coord_xy, scissor_2)};
+
+    Id result{OpAll(bool_id, OpCompositeConstruct(bvec_ids.Get(4), cond1, cond2))};
+    if (config.state.scissor_test_mode == RasterizerRegs::ScissorMode::Include) {
+        result = OpLogicalNot(bool_id, result);
+    }
+
+    const Id merge_block{OpLabel()};
+    const Id kill_label{OpLabel()};
+    OpSelectionMerge(merge_block, spv::SelectionControlMask::MaskNone);
+    OpBranchConditional(result, kill_label, merge_block);
+
+    AddLabel(kill_label);
+    OpKill();
+
+    AddLabel(merge_block);
 }
 
 void FragmentModule::WriteLighting() {
@@ -570,7 +610,7 @@ using ProcTexShift = TexturingRegs::ProcTexShift;
 using ProcTexCombiner = TexturingRegs::ProcTexCombiner;
 using ProcTexFilter = TexturingRegs::ProcTexFilter;
 
-bool FragmentModule::WriteAlphaTestCondition(FramebufferRegs::CompareFunc func) {
+void FragmentModule::WriteAlphaTestCondition(FramebufferRegs::CompareFunc func) {
     using CompareFunc = FramebufferRegs::CompareFunc;
 
     // The compare func is to keep the fragment so we invert it to discard it
@@ -593,13 +633,10 @@ bool FragmentModule::WriteAlphaTestCondition(FramebufferRegs::CompareFunc func) 
         }
     };
 
+    // Don't check for kill, this is done earlier
     switch (func) {
-    case CompareFunc::Never: // Kill the fragment
-        OpKill();
-        OpFunctionEnd();
-        return true;
     case CompareFunc::Always: // Do nothing
-        return false;
+        break;
     case CompareFunc::Equal:
     case CompareFunc::NotEqual:
     case CompareFunc::LessThan:
@@ -618,10 +655,9 @@ bool FragmentModule::WriteAlphaTestCondition(FramebufferRegs::CompareFunc func) 
         AddLabel(kill_label);
         OpKill();
         AddLabel(keep_label);
-        return false;
+        break;
     }
     default:
-        return false;
         LOG_CRITICAL(Render_Vulkan, "Unknown alpha test condition {}", func);
         break;
     }
@@ -975,9 +1011,7 @@ void FragmentModule::DefineProcTexSampler() {
         const Id proctex_alpha_map_offset{GetShaderDataMember(i32_id, ConstS32(13))};
         const Id final_alpha{AppendProcTexCombineAndMap(config.state.proctex.alpha_combiner, u, v,
                                                         proctex_alpha_map_offset)};
-        const Id final_color_xyz{
-            OpVectorShuffle(vec_ids.Get(3), final_color, final_color, 0, 1, 2)};
-        final_color = OpCompositeConstruct(vec_ids.Get(4), final_color_xyz, final_alpha);
+        final_color = OpCompositeInsert(vec_ids.Get(4), final_alpha, final_color, 3);
     }
 
     OpReturnValue(final_color);

@@ -334,7 +334,8 @@ private:
         case RegisterType::FloatUniform:
             if (address_register_index != 0) {
                 // TODO: Verify hardware behavior of out-of-bounds register number.
-                return fmt::format("({0} + address_registers.{1} < 96 ? uniforms.f[{0} + address_registers.{1}] : vec4(0))",
+                return fmt::format("({0} + address_registers.{1} < 96 ? uniforms.f[{0} + "
+                                   "address_registers.{1}] : vec4(0))",
                                    index, "xyz"[address_register_index - 1]);
             }
             return fmt::format("uniforms.f[{}]", index);

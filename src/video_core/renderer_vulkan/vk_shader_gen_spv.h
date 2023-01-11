@@ -33,8 +33,12 @@ public:
     /// Emits SPIR-V bytecode corresponding to the provided pica fragment configuration
     void Generate();
 
-    /// Undos the vulkan perspective transformation and applies the pica one
+private:
+    /// Undos the vulkan perspective transformation and applies the PICA one
     void WriteDepth();
+
+    /// Emits code to emulate the scissor rectangle
+    void WriteScissor();
 
     /// Writes the code to emulate fragment lighting
     void WriteLighting();
@@ -46,8 +50,7 @@ public:
     void DefineProcTexSampler();
 
     /// Writes the if-statement condition used to evaluate alpha testing.
-    /// Returns true if the fragment was discarded
-    [[nodiscard]] bool WriteAlphaTestCondition(Pica::FramebufferRegs::CompareFunc func);
+    void WriteAlphaTestCondition(Pica::FramebufferRegs::CompareFunc func);
 
     /// Samples the current fragment texel from the provided texture unit
     [[nodiscard]] Id SampleTexture(u32 texture_unit);

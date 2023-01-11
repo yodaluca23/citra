@@ -85,7 +85,8 @@ static std::tuple<PicaVSConfig, Pica::Shader::ShaderSetup> BuildVSConfigFromRaw(
     return {PicaVSConfig{raw.GetRawShaderConfig().vs, setup}, setup};
 }
 
-static void SetShaderUniformBlockBinding(GLuint shader, const char* name, Pica::Shader::UniformBindings binding,
+static void SetShaderUniformBlockBinding(GLuint shader, const char* name,
+                                         Pica::Shader::UniformBindings binding,
                                          std::size_t expected_size) {
     const GLuint ub_index = glGetUniformBlockIndex(shader, name);
     if (ub_index == GL_INVALID_INDEX) {
