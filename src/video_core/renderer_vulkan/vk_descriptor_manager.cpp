@@ -137,8 +137,8 @@ void DescriptorManager::BindDescriptorSets() {
     }
 
     scheduler.Record([this, bound_sets](vk::CommandBuffer cmdbuf) {
-        cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout, 0,
-                                         bound_sets, {});
+        cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout, 0, bound_sets,
+                                  {});
     });
 
     descriptor_set_dirty.fill(false);
