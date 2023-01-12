@@ -63,6 +63,9 @@ constexpr void DecodePixel(const std::byte* source, std::byte* dest) {
         const u8 ia4 = static_cast<const u8>(source[0]);
         std::memset(dest, Common::Color::Convert4To8(ia4 >> 4), 3);
         dest[3] = std::byte{Common::Color::Convert4To8(ia4 & 0xF)};
+    } else if constexpr (format == PixelFormat::D24 && converted) {
+        const auto d32 = Common::Color::DecodeD24(reinterpret_cast<const u8*>(source)) / 16777215.f;
+        std::memcpy(dest, &d32, sizeof(d32));
     } else {
         std::memcpy(dest, source, bytes_per_pixel);
     }
@@ -140,6 +143,10 @@ constexpr void EncodePixel(const std::byte* source, std::byte* dest) {
         Common::Vec4<u8> rgba;
         std::memcpy(rgba.AsArray(), source, 4);
         Common::Color::EncodeRGBA4(rgba, reinterpret_cast<u8*>(dest));
+    } else if constexpr (format == PixelFormat::D24 && converted) {
+        float d32;
+        std::memcpy(&d32, source, sizeof(d32));
+        Common::Color::EncodeD24(d32 * 0xFFFFFF, reinterpret_cast<u8*>(dest));
     } else {
         std::memcpy(dest, source, bytes_per_pixel);
     }
@@ -299,7 +306,20 @@ static constexpr std::array<MortonFunc, 18> UNSWIZZLE_TABLE_CONVERTED = {
     MortonCopy<true, PixelFormat::RGB8, true>,   // 1
     MortonCopy<true, PixelFormat::RGB5A1, true>, // 2
     MortonCopy<true, PixelFormat::RGB565, true>, // 3
-    MortonCopy<true, PixelFormat::RGBA4, true>   // 4
+    MortonCopy<true, PixelFormat::RGBA4, true>,  // 4
+    nullptr,                                     // 5
+    nullptr,                                     // 6
+    nullptr,                                     // 7
+    nullptr,                                     // 8
+    nullptr,                                     // 9
+    nullptr,                                     // 10
+    nullptr,                                     // 11
+    nullptr,                                     // 12
+    nullptr,                                     // 13
+    nullptr,                                     // 14
+    nullptr,                                     // 15
+    MortonCopy<true, PixelFormat::D24, true>,    // 16
+    nullptr,                                     // 17
 };
 
 static constexpr std::array<MortonFunc, 18> SWIZZLE_TABLE = {

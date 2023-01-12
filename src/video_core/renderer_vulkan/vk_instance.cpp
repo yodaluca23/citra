@@ -295,8 +295,7 @@ vk::ImageAspectFlags MakeAspect(VideoCore::SurfaceType type) {
 }
 
 FormatTraits Instance::DetermineTraits(VideoCore::PixelFormat pixel_format, vk::Format format) {
-    const vk::ImageAspectFlags format_aspect =
-        MakeAspect(VideoCore::GetFormatType(pixel_format));
+    const vk::ImageAspectFlags format_aspect = MakeAspect(VideoCore::GetFormatType(pixel_format));
     const vk::FormatProperties format_properties = physical_device.getFormatProperties(format);
 
     const vk::FormatFeatureFlagBits attachment_usage =
