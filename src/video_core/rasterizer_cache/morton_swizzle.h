@@ -348,7 +348,20 @@ static constexpr std::array<MortonFunc, 18> SWIZZLE_TABLE_CONVERTED = {
     MortonCopy<false, PixelFormat::RGB8, true>,   // 1
     MortonCopy<false, PixelFormat::RGB5A1, true>, // 2
     MortonCopy<false, PixelFormat::RGB565, true>, // 3
-    MortonCopy<false, PixelFormat::RGBA4, true>   // 4
+    MortonCopy<false, PixelFormat::RGBA4, true>,  // 4
+    nullptr,                                      // 5
+    nullptr,                                      // 6
+    nullptr,                                      // 7
+    nullptr,                                      // 8
+    nullptr,                                      // 9
+    nullptr,                                      // 10
+    nullptr,                                      // 11
+    nullptr,                                      // 12
+    nullptr,                                      // 13
+    nullptr,                                      // 14
+    nullptr,                                      // 15
+    MortonCopy<false, PixelFormat::D24, true>,    // 16
+    nullptr,                                      // 17
 };
 
 } // namespace VideoCore

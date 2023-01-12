@@ -52,6 +52,10 @@ void SwizzleTexture(const SurfaceParams& swizzle_info, PAddr start_addr, PAddr e
                     bool convert) {
     const u32 func_index = static_cast<u32>(swizzle_info.pixel_format);
     const MortonFunc SwizzleImpl = (convert ? SWIZZLE_TABLE_CONVERTED : SWIZZLE_TABLE)[func_index];
+    if (!SwizzleImpl) {
+        LOG_ERROR(Render_Vulkan, "Unimplemented swizzle function for pixel format {}.", func_index);
+        UNREACHABLE();
+    }
     SwizzleImpl(swizzle_info.width, swizzle_info.height, start_addr - swizzle_info.addr,
                 end_addr - swizzle_info.addr, source_linear, dest_tiled);
 }
@@ -62,6 +66,11 @@ void UnswizzleTexture(const SurfaceParams& unswizzle_info, PAddr start_addr, PAd
     const u32 func_index = static_cast<u32>(unswizzle_info.pixel_format);
     const MortonFunc UnswizzleImpl =
         (convert ? UNSWIZZLE_TABLE_CONVERTED : UNSWIZZLE_TABLE)[func_index];
+    if (!UnswizzleImpl) {
+        LOG_ERROR(Render_Vulkan, "Unimplemented un-swizzle function for pixel format {}.",
+                  func_index);
+        UNREACHABLE();
+    }
     UnswizzleImpl(unswizzle_info.width, unswizzle_info.height, start_addr - unswizzle_info.addr,
                   end_addr - unswizzle_info.addr, dest_linear, source_tiled);
 }
