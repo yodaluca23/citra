@@ -300,6 +300,26 @@ void ConvertRGBA8ToRGB5A1(std::span<const std::byte> source, std::span<std::byte
     }
 }
 
+void ConvertD24ToD32(std::span<const std::byte> source, std::span<std::byte> dest) {
+    u32 j = 0;
+    for (std::size_t i = 0; i < dest.size(); i += 4) {
+        auto d32 =
+            Common::Color::DecodeD24(reinterpret_cast<const u8*>(source.data() + j)) / 16777215.f;
+        std::memcpy(dest.data() + i, &d32, sizeof(d32));
+        j += 3;
+    }
+}
+
+void ConvertD32ToD24(std::span<const std::byte> source, std::span<std::byte> dest) {
+    u32 j = 0;
+    for (std::size_t i = 0; i < dest.size(); i += 3) {
+        float d32;
+        std::memcpy(&d32, source.data() + j, sizeof(d32));
+        Common::Color::EncodeD24(d32 * 0xFFFFFF, reinterpret_cast<u8*>(dest.data() + i));
+        j += 4;
+    }
+}
+
 void ConvertD32S8ToD24S8(std::span<const std::byte> source, std::span<std::byte> dest) {
     std::size_t depth_offset = 0;
     std::size_t stencil_offset = 4 * source.size() / 5;

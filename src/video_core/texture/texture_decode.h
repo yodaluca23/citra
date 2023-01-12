@@ -89,6 +89,10 @@ void ConvertRGB5A1ToRGBA8(std::span<const std::byte> source, std::span<std::byte
 
 void ConvertRGBA8ToRGB5A1(std::span<const std::byte> source, std::span<std::byte> dest);
 
+void ConvertD24ToD32(std::span<const std::byte> source, std::span<std::byte> dest);
+
+void ConvertD32ToD24(std::span<const std::byte> source, std::span<std::byte> dest);
+
 void ConvertD32S8ToD24S8(std::span<const std::byte> source, std::span<std::byte> dest);
 
 void InterleaveD24S8(std::span<const std::byte> source, std::span<std::byte> dest);

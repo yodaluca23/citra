@@ -23,9 +23,11 @@ struct FormatTraits {
     bool blit_support = false;       ///< True if the format supports blit operations
     bool attachment_support = false; ///< True if the format supports being used as an attachment
     bool storage_support = false;    ///< True if the format supports storage operations
-    vk::ImageUsageFlags usage{};     ///< Most supported usage for the native format
-    vk::Format native = vk::Format::eUndefined;   ///< Closest possible native format
-    vk::Format fallback = vk::Format::eUndefined; ///< Best fallback format
+    bool requires_conversion =
+        false;                   ///< True if the format requires conversion to the native format
+    vk::ImageUsageFlags usage{}; ///< Most supported usage for the native format
+    vk::ImageAspectFlags aspect; ///< Aspect flags of the format
+    vk::Format native = vk::Format::eUndefined; ///< Closest possible native format
 };
 
 /// The global Vulkan instance
@@ -202,7 +204,8 @@ public:
 
 private:
     /// Returns the optimal supported usage for the requested format
-    vk::FormatFeatureFlags GetFormatFeatures(vk::Format format);
+    [[nodiscard]] FormatTraits DetermineTraits(VideoCore::PixelFormat pixel_format,
+                                               vk::Format format);
 
     /// Creates the format compatibility table for the current device
     void CreateFormatTable();

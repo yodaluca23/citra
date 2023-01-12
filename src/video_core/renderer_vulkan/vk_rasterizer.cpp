@@ -63,8 +63,10 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
     : instance{instance}, scheduler{scheduler}, runtime{runtime},
       renderpass_cache{renderpass_cache}, desc_manager{desc_manager}, res_cache{*this, runtime},
       pipeline_cache{instance, scheduler, renderpass_cache, desc_manager},
-      null_surface{NULL_PARAMS, vk::Format::eR8G8B8A8Unorm, NULL_USAGE, runtime},
-      null_storage_surface{NULL_PARAMS, vk::Format::eR32Uint, NULL_STORAGE_USAGE, runtime},
+      null_surface{NULL_PARAMS, vk::Format::eR8G8B8A8Unorm, NULL_USAGE,
+                   vk::ImageAspectFlagBits::eColor, runtime},
+      null_storage_surface{NULL_PARAMS, vk::Format::eR32Uint, NULL_STORAGE_USAGE,
+                           vk::ImageAspectFlagBits::eColor, runtime},
       stream_buffer{instance, scheduler, BUFFER_USAGE, STREAM_BUFFER_SIZE},
       texture_buffer{instance, scheduler, TEX_BUFFER_USAGE, TextureBufferSize(instance)},
       texture_lf_buffer{instance, scheduler, TEX_BUFFER_USAGE, TextureBufferSize(instance)} {

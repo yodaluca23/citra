@@ -106,7 +106,7 @@ public:
     /// Allocates a vulkan image
     [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, VideoCore::PixelFormat pixel_format,
                                       VideoCore::TextureType type, vk::Format format,
-                                      vk::ImageUsageFlags usage);
+                                      vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect);
 
     /// Performs required format convertions on the staging data
     void FormatConvert(const Surface& surface, bool upload, std::span<std::byte> source,
@@ -173,7 +173,7 @@ public:
     Surface(TextureRuntime& runtime);
     Surface(const VideoCore::SurfaceParams& params, TextureRuntime& runtime);
     Surface(const VideoCore::SurfaceParams& params, vk::Format format, vk::ImageUsageFlags usage,
-            TextureRuntime& runtime);
+            vk::ImageAspectFlags aspect, TextureRuntime& runtime);
     ~Surface() override;
 
     /// Uploads pixel data in staging to a rectangle region of the surface texture

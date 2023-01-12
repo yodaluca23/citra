@@ -276,6 +276,80 @@ FormatTraits Instance::GetTraits(VideoCore::PixelFormat pixel_format) const {
     return format_table[index];
 }
 
+vk::ImageAspectFlags MakeAspect(VideoCore::SurfaceType type) {
+    switch (type) {
+    case VideoCore::SurfaceType::Color:
+    case VideoCore::SurfaceType::Texture:
+    case VideoCore::SurfaceType::Fill:
+        return vk::ImageAspectFlagBits::eColor;
+    case VideoCore::SurfaceType::Depth:
+        return vk::ImageAspectFlagBits::eDepth;
+    case VideoCore::SurfaceType::DepthStencil:
+        return vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
+    default:
+        LOG_CRITICAL(Render_Vulkan, "Invalid surface type {}", type);
+        UNREACHABLE();
+    }
+
+    return vk::ImageAspectFlagBits::eColor;
+}
+
+FormatTraits Instance::DetermineTraits(VideoCore::PixelFormat pixel_format, vk::Format format) {
+    const vk::ImageAspectFlags format_aspect =
+        MakeAspect(VideoCore::GetFormatType(pixel_format));
+    const vk::FormatProperties format_properties = physical_device.getFormatProperties(format);
+
+    const vk::FormatFeatureFlagBits attachment_usage =
+        (format_aspect & vk::ImageAspectFlagBits::eDepth)
+            ? vk::FormatFeatureFlagBits::eDepthStencilAttachment
+            : vk::FormatFeatureFlagBits::eColorAttachmentBlend;
+
+    const vk::FormatFeatureFlags storage_usage = vk::FormatFeatureFlagBits::eStorageImage;
+    const vk::FormatFeatureFlags transfer_usage = vk::FormatFeatureFlagBits::eSampledImage;
+    const vk::FormatFeatureFlags blit_usage =
+        vk::FormatFeatureFlagBits::eBlitSrc | vk::FormatFeatureFlagBits::eBlitDst;
+
+    const bool supports_transfer =
+        (format_properties.optimalTilingFeatures & transfer_usage) == transfer_usage;
+    const bool supports_blit = (format_properties.optimalTilingFeatures & blit_usage) == blit_usage;
+    const bool supports_attachment =
+        (format_properties.optimalTilingFeatures & attachment_usage) == attachment_usage &&
+        pixel_format != VideoCore::PixelFormat::RGB8;
+    const bool supports_storage =
+        (format_properties.optimalTilingFeatures & storage_usage) == storage_usage;
+    const bool requires_conversion =
+        // Requires component flip.
+        pixel_format == VideoCore::PixelFormat::RGBA8 ||
+        // Requires (de)interleaving.
+        pixel_format == VideoCore::PixelFormat::D24S8;
+
+    // Find the most inclusive usage flags for this format
+    vk::ImageUsageFlags best_usage;
+    if (supports_blit || supports_transfer) {
+        best_usage |= vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst |
+                      vk::ImageUsageFlagBits::eTransferSrc;
+    }
+    if (supports_attachment) {
+        best_usage |= (format_aspect & vk::ImageAspectFlagBits::eDepth)
+                          ? vk::ImageUsageFlagBits::eDepthStencilAttachment
+                          : vk::ImageUsageFlagBits::eColorAttachment;
+    }
+    if (supports_storage) {
+        best_usage |= vk::ImageUsageFlagBits::eStorage;
+    }
+
+    return FormatTraits{
+        .transfer_support = supports_transfer,
+        .blit_support = supports_blit,
+        .attachment_support = supports_attachment,
+        .storage_support = supports_storage,
+        .requires_conversion = requires_conversion,
+        .usage = best_usage,
+        .aspect = format_aspect,
+        .native = format,
+    };
+}
+
 void Instance::CreateFormatTable() {
     constexpr std::array pixel_formats = {
         VideoCore::PixelFormat::RGBA8,  VideoCore::PixelFormat::RGB8,
@@ -288,73 +362,32 @@ void Instance::CreateFormatTable() {
         VideoCore::PixelFormat::D16,    VideoCore::PixelFormat::D24,
         VideoCore::PixelFormat::D24S8};
 
-    const vk::FormatFeatureFlags storage_usage = vk::FormatFeatureFlagBits::eStorageImage;
-    const vk::FormatFeatureFlags transfer_usage = vk::FormatFeatureFlagBits::eSampledImage;
-    const vk::FormatFeatureFlags blit_usage =
-        vk::FormatFeatureFlagBits::eBlitSrc | vk::FormatFeatureFlagBits::eBlitDst;
-
     for (const auto& pixel_format : pixel_formats) {
-        const vk::Format format = ToVkFormat(pixel_format);
-        const vk::FormatProperties properties = physical_device.getFormatProperties(format);
-        const vk::ImageAspectFlags aspect = GetImageAspect(format);
+        const auto format = ToVkFormat(pixel_format);
+        FormatTraits traits = DetermineTraits(pixel_format, format);
 
-        const vk::FormatFeatureFlagBits attachment_usage =
-            (aspect & vk::ImageAspectFlagBits::eDepth)
-                ? vk::FormatFeatureFlagBits::eDepthStencilAttachment
-                : vk::FormatFeatureFlagBits::eColorAttachmentBlend;
-
-        const bool supports_transfer =
-            (properties.optimalTilingFeatures & transfer_usage) == transfer_usage;
-        const bool supports_blit = (properties.optimalTilingFeatures & blit_usage) == blit_usage;
-        bool supports_attachment =
-            (properties.optimalTilingFeatures & attachment_usage) == attachment_usage;
-        const bool supports_storage =
-            (properties.optimalTilingFeatures & storage_usage) == storage_usage;
-
-        // Find the most inclusive usage flags for this format
-        vk::ImageUsageFlags best_usage;
-        if (supports_blit || supports_transfer) {
-            best_usage |= vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst |
-                          vk::ImageUsageFlagBits::eTransferSrc;
-        }
-        if (supports_attachment) {
-            best_usage |= (aspect & vk::ImageAspectFlagBits::eDepth)
-                              ? vk::ImageUsageFlagBits::eDepthStencilAttachment
-                              : vk::ImageUsageFlagBits::eColorAttachment;
-        }
-        if (supports_storage) {
-            best_usage |= vk::ImageUsageFlagBits::eStorage;
-        }
-
-        // Always fallback to RGBA8 or D32(S8) for convenience
-        vk::Format fallback = vk::Format::eR8G8B8A8Unorm;
-        if (aspect & vk::ImageAspectFlagBits::eDepth) {
-            fallback = vk::Format::eD32Sfloat;
-            if (aspect & vk::ImageAspectFlagBits::eStencil) {
-                fallback = vk::Format::eD32SfloatS8Uint;
+        const bool is_suitable =
+            traits.transfer_support && traits.attachment_support &&
+            (traits.blit_support || traits.aspect & vk::ImageAspectFlagBits::eDepth);
+        // Fall back if the native format is not suitable.
+        if (!is_suitable) {
+            // Always fallback to RGBA8 or D32(S8) for convenience
+            auto fallback = vk::Format::eR8G8B8A8Unorm;
+            if (traits.aspect & vk::ImageAspectFlagBits::eDepth) {
+                fallback = vk::Format::eD32Sfloat;
+                if (traits.aspect & vk::ImageAspectFlagBits::eStencil) {
+                    fallback = vk::Format::eD32SfloatS8Uint;
+                }
             }
-        }
-
-        // Report completely unsupported formats
-        if (!supports_blit && !supports_attachment && !supports_storage) {
             LOG_WARNING(Render_Vulkan, "Format {} unsupported, falling back unconditionally to {}",
                         vk::to_string(format), vk::to_string(fallback));
-        }
-
-        if (pixel_format == VideoCore::PixelFormat::RGB8) {
-            supports_attachment = false;
+            traits = DetermineTraits(pixel_format, fallback);
+            // Always requires conversion if backing format does not match.
+            traits.requires_conversion = true;
         }
 
         const u32 index = static_cast<u32>(pixel_format);
-        format_table[index] = FormatTraits{
-            .transfer_support = supports_transfer,
-            .blit_support = supports_blit,
-            .attachment_support = supports_attachment,
-            .storage_support = supports_storage,
-            .usage = best_usage,
-            .native = format,
-            .fallback = fallback,
-        };
+        format_table[index] = traits;
     }
 }
 

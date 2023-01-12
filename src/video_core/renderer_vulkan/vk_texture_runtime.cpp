@@ -26,24 +26,6 @@ struct RecordParams {
     vk::Image dst_image;
 };
 
-[[nodiscard]] vk::ImageAspectFlags MakeAspect(VideoCore::SurfaceType type) {
-    switch (type) {
-    case VideoCore::SurfaceType::Color:
-    case VideoCore::SurfaceType::Texture:
-    case VideoCore::SurfaceType::Fill:
-        return vk::ImageAspectFlagBits::eColor;
-    case VideoCore::SurfaceType::Depth:
-        return vk::ImageAspectFlagBits::eDepth;
-    case VideoCore::SurfaceType::DepthStencil:
-        return vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
-    default:
-        LOG_CRITICAL(Render_Vulkan, "Invalid surface type {}", type);
-        UNREACHABLE();
-    }
-
-    return vk::ImageAspectFlagBits::eColor;
-}
-
 [[nodiscard]] vk::Filter MakeFilter(VideoCore::PixelFormat pixel_format) {
     switch (pixel_format) {
     case VideoCore::PixelFormat::D16:
@@ -89,6 +71,17 @@ u32 UnpackDepthStencil(const StagingData& data, vk::Format dest) {
             const u32 d24 = d24s8 >> 8;
             mapped[stencil_offset] = static_cast<std::byte>(d24s8 & 0xFF);
             std::memcpy(ptr, &d24, 4);
+            stencil_offset++;
+        }
+        break;
+    }
+    case vk::Format::eD32SfloatS8Uint: {
+        for (; stencil_offset < data.size; depth_offset += 4) {
+            std::byte* ptr = mapped.data() + depth_offset;
+            const u32 d24s8 = VideoCore::MakeInt<u32>(ptr);
+            const float d32 = (d24s8 >> 8) / 16777215.f;
+            mapped[stencil_offset] = static_cast<std::byte>(d24s8 & 0xFF);
+            std::memcpy(ptr, &d32, 4);
             stencil_offset++;
         }
         break;
@@ -172,26 +165,18 @@ void TextureRuntime::Finish() {
 ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
                                     VideoCore::TextureType type) {
     const FormatTraits traits = instance.GetTraits(format);
-    const vk::ImageAspectFlags aspect = MakeAspect(VideoCore::GetFormatType(format));
-
-    // Depth buffers are not supposed to support blit by the spec so don't require it.
-    const bool is_suitable = traits.transfer_support && traits.attachment_support &&
-                             (traits.blit_support || aspect & vk::ImageAspectFlagBits::eDepth);
-    const vk::Format vk_format = is_suitable ? traits.native : traits.fallback;
-    const vk::ImageUsageFlags vk_usage = is_suitable ? traits.usage : GetImageUsage(aspect);
-
-    return Allocate(width, height, format, type, vk_format, vk_usage);
+    return Allocate(width, height, format, type, traits.native, traits.usage, traits.aspect);
 }
 
 MICROPROFILE_DEFINE(Vulkan_ImageAlloc, "Vulkan", "TextureRuntime Finish", MP_RGB(192, 52, 235));
 ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelFormat pixel_format,
                                     VideoCore::TextureType type, vk::Format format,
-                                    vk::ImageUsageFlags usage) {
+                                    vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect) {
     MICROPROFILE_SCOPE(Vulkan_ImageAlloc);
 
     ImageAlloc alloc{};
     alloc.format = format;
-    alloc.aspect = GetImageAspect(format);
+    alloc.aspect = aspect;
 
     // The internal format does not provide enough guarantee of texture uniqueness
     // especially when many pixel formats fallback to RGBA8
@@ -384,6 +369,8 @@ void TextureRuntime::FormatConvert(const Surface& surface, bool upload, std::spa
             return Pica::Texture::ConvertBGRToRGBA(source, dest);
         case VideoCore::PixelFormat::RGBA4:
             return Pica::Texture::ConvertRGBA4ToRGBA8(source, dest);
+        case VideoCore::PixelFormat::D24:
+            return Pica::Texture::ConvertD24ToD32(source, dest);
         default:
             break;
         }
@@ -395,6 +382,8 @@ void TextureRuntime::FormatConvert(const Surface& surface, bool upload, std::spa
             return Pica::Texture::ConvertRGBA8ToRGBA4(source, dest);
         case VideoCore::PixelFormat::RGB8:
             return Pica::Texture::ConvertRGBAToBGR(source, dest);
+        case VideoCore::PixelFormat::D24:
+            return Pica::Texture::ConvertD32ToD24(source, dest);
         default:
             break;
         }
@@ -850,10 +839,9 @@ const ReinterpreterList& TextureRuntime::GetPossibleReinterpretations(
 
 bool TextureRuntime::NeedsConvertion(VideoCore::PixelFormat format) const {
     const FormatTraits traits = instance.GetTraits(format);
-    const VideoCore::SurfaceType type = VideoCore::GetFormatType(format);
-    return type == VideoCore::SurfaceType::Color &&
-           (format == VideoCore::PixelFormat::RGBA8 || !traits.blit_support ||
-            !traits.attachment_support);
+    return traits.requires_conversion &&
+           // DepthStencil formats are handled elsewhere due to de-interleaving.
+           traits.aspect != (vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
 }
 
 Surface::Surface(TextureRuntime& runtime)
@@ -870,12 +858,12 @@ Surface::Surface(const VideoCore::SurfaceParams& params, TextureRuntime& runtime
 }
 
 Surface::Surface(const VideoCore::SurfaceParams& params, vk::Format format,
-                 vk::ImageUsageFlags usage, TextureRuntime& runtime)
+                 vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect, TextureRuntime& runtime)
     : VideoCore::SurfaceBase<Surface>{params}, runtime{runtime}, instance{runtime.GetInstance()},
       scheduler{runtime.GetScheduler()} {
     if (format != vk::Format::eUndefined) {
         alloc = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), pixel_format, texture_type,
-                                 format, usage);
+                                 format, usage, aspect);
     }
 }
 
@@ -1214,7 +1202,7 @@ void Surface::DepthStencilDownload(const VideoCore::BufferTextureCopy& download,
     Surface r32_surface{r32_params, vk::Format::eR32Uint,
                         vk::ImageUsageFlagBits::eTransferSrc |
                             vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eStorage,
-                        runtime};
+                        vk::ImageAspectFlagBits::eColor, runtime};
 
     const VideoCore::TextureBlit blit = {
         .src_level = download.texture_level,
