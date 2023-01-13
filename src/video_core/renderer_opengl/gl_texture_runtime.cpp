@@ -82,7 +82,7 @@ StagingData TextureRuntime::FindStaging(u32 size, bool upload) {
 
     return StagingData{.buffer = buffer.GetHandle(),
                        .size = size,
-                       .mapped = std::span<std::byte>{reinterpret_cast<std::byte*>(data), size},
+                       .mapped = std::span<u8>{data, size},
                        .buffer_offset = offset};
 }
 
@@ -101,23 +101,6 @@ const FormatTuple& TextureRuntime::GetFormatTuple(VideoCore::PixelFormat pixel_f
     }
 
     return DEFAULT_TUPLE;
-}
-
-void TextureRuntime::FormatConvert(const Surface& surface, bool upload, std::span<std::byte> source,
-                                   std::span<std::byte> dest) {
-    const VideoCore::PixelFormat format = surface.pixel_format;
-    if (format == VideoCore::PixelFormat::RGBA8 && driver.IsOpenGLES()) {
-        return Pica::Texture::ConvertABGRToRGBA(source, dest);
-    } else if (format == VideoCore::PixelFormat::RGB8 && driver.IsOpenGLES()) {
-        return Pica::Texture::ConvertBGRToRGB(source, dest);
-    } else {
-        // Sometimes the source size might be larger than the destination.
-        // This can happen during texture downloads when FromInterval aligns
-        // the flush range to scanline boundaries. In that case only copy
-        // what we need
-        const std::size_t copy_size = std::min(source.size(), dest.size());
-        std::memcpy(dest.data(), source.data(), copy_size);
-    }
 }
 
 OGLTexture TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelFormat format,

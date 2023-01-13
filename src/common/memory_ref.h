@@ -107,11 +107,11 @@ public:
     }
 
     auto GetWriteBytes(std::size_t size) {
-        return std::span{reinterpret_cast<std::byte*>(cptr), size > csize ? csize : size};
+        return std::span{cptr, size > csize ? csize : size};
     }
 
     auto GetReadBytes(std::size_t size) const {
-        return std::span{reinterpret_cast<const std::byte*>(cptr), size > csize ? csize : size};
+        return std::span{cptr, size > csize ? csize : size};
     }
 
     std::size_t GetSize() const {

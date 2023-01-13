@@ -167,7 +167,7 @@ private:
     SurfaceSet remove_surfaces;
     u16 resolution_scale_factor;
     std::vector<std::function<void()>> download_queue;
-    std::vector<std::byte> staging_buffer;
+    std::vector<u8> staging_buffer;
     std::unordered_map<TextureCubeConfig, Surface> texture_cube_cache;
     std::recursive_mutex mutex;
 };
@@ -916,12 +916,8 @@ void RasterizerCache<T>::UploadSurface(const Surface& surface, SurfaceInterval i
     }
 
     const auto upload_data = source_ptr.GetWriteBytes(load_info.end - load_info.addr);
-    if (surface->is_tiled) {
-        UnswizzleTexture(load_info, load_info.addr, load_info.end, upload_data, staging.mapped,
-                         runtime.NeedsConvertion(surface->pixel_format));
-    } else {
-        runtime.FormatConvert(*surface, true, upload_data, staging.mapped);
-    }
+    DecodeTexture(load_info, load_info.addr, load_info.end, upload_data, staging.mapped,
+                  runtime.NeedsConvertion(surface->pixel_format));
 
     const BufferTextureCopy upload = {.buffer_offset = 0,
                                       .buffer_size = staging.size,
@@ -957,12 +953,8 @@ void RasterizerCache<T>::DownloadSurface(const Surface& surface, SurfaceInterval
 
     download_queue.push_back([this, surface, flush_start, flush_end, flush_info,
                               mapped = staging.mapped, download_dest]() {
-        if (surface->is_tiled) {
-            SwizzleTexture(flush_info, flush_start, flush_end, mapped, download_dest,
-                           runtime.NeedsConvertion(surface->pixel_format));
-        } else {
-            runtime.FormatConvert(*surface, false, mapped, download_dest);
-        }
+        EncodeTexture(flush_info, flush_start, flush_end, mapped, download_dest,
+                      runtime.NeedsConvertion(surface->pixel_format));
     });
 }
 

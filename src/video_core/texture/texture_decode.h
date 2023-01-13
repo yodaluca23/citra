@@ -55,48 +55,4 @@ Common::Vec4<u8> LookupTexture(const u8* source, unsigned int x, unsigned int y,
 Common::Vec4<u8> LookupTexelInTile(const u8* source, unsigned int x, unsigned int y,
                                    const TextureInfo& info, bool disable_alpha);
 
-/**
- * Converts pixel data encoded in BGR format to RGBA
- *
- * @param source Span to the source pixel data
- * @param dest Span to the destination pixel data
- */
-void ConvertBGRToRGB(std::span<const std::byte> source, std::span<std::byte> dest);
-
-/**
- * Converts pixel data encoded in BGR format to RGBA
- *
- * @param source Span to the source pixel data
- * @param dest Span to the destination pixel data
- */
-void ConvertBGRToRGBA(std::span<const std::byte> source, std::span<std::byte> dest);
-
-void ConvertRGBAToBGR(std::span<const std::byte> source, std::span<std::byte> dest);
-
-/**
- * Converts pixel data encoded in ABGR format to RGBA
- *
- * @param source Span to the source pixel data
- * @param dest Span to the destination pixel data
- */
-void ConvertABGRToRGBA(std::span<const std::byte> source, std::span<std::byte> dest);
-
-void ConvertRGBA4ToRGBA8(std::span<const std::byte> source, std::span<std::byte> dest);
-
-void ConvertRGBA8ToRGBA4(std::span<const std::byte> source, std::span<std::byte> dest);
-
-void ConvertRGB5A1ToRGBA8(std::span<const std::byte> source, std::span<std::byte> dest);
-
-void ConvertRGBA8ToRGB5A1(std::span<const std::byte> source, std::span<std::byte> dest);
-
-void ConvertD24ToD32(std::span<const std::byte> source, std::span<std::byte> dest);
-
-void ConvertD32ToD24(std::span<const std::byte> source, std::span<std::byte> dest);
-
-void ConvertD32S8ToD24S8(std::span<const std::byte> source, std::span<std::byte> dest);
-
-void InterleaveD24S8(std::span<const std::byte> source, std::span<std::byte> dest);
-
-void DeinterleaveD24S8(std::span<const std::byte> source, std::span<std::byte> dest);
-
 } // namespace Pica::Texture

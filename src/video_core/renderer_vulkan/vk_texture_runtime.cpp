@@ -4,7 +4,7 @@
 
 #include <bit>
 #include "common/microprofile.h"
-#include "video_core/rasterizer_cache/morton_swizzle.h"
+#include "video_core/rasterizer_cache/texture_codec.h"
 #include "video_core/rasterizer_cache/utils.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
@@ -66,10 +66,10 @@ u32 UnpackDepthStencil(const StagingData& data, vk::Format dest) {
     switch (dest) {
     case vk::Format::eD24UnormS8Uint: {
         for (; stencil_offset < data.size; depth_offset += 4) {
-            std::byte* ptr = mapped.data() + depth_offset;
+            u8* ptr = mapped.data() + depth_offset;
             const u32 d24s8 = VideoCore::MakeInt<u32>(ptr);
             const u32 d24 = d24s8 >> 8;
-            mapped[stencil_offset] = static_cast<std::byte>(d24s8 & 0xFF);
+            mapped[stencil_offset] = d24s8 & 0xFF;
             std::memcpy(ptr, &d24, 4);
             stencil_offset++;
         }
@@ -77,10 +77,10 @@ u32 UnpackDepthStencil(const StagingData& data, vk::Format dest) {
     }
     case vk::Format::eD32SfloatS8Uint: {
         for (; stencil_offset < data.size; depth_offset += 4) {
-            std::byte* ptr = mapped.data() + depth_offset;
+            u8* ptr = mapped.data() + depth_offset;
             const u32 d24s8 = VideoCore::MakeInt<u32>(ptr);
             const float d32 = (d24s8 >> 8) / 16777215.f;
-            mapped[stencil_offset] = static_cast<std::byte>(d24s8 & 0xFF);
+            mapped[stencil_offset] = d24s8 & 0xFF;
             std::memcpy(ptr, &d32, 4);
             stencil_offset++;
         }
@@ -151,7 +151,7 @@ StagingData TextureRuntime::FindStaging(u32 size, bool upload) {
     return StagingData{
         .buffer = buffer.Handle(),
         .size = size,
-        .mapped = std::span<std::byte>{reinterpret_cast<std::byte*>(data), size},
+        .mapped = std::span<u8>{data, size},
         .buffer_offset = offset,
     };
 }
@@ -352,46 +352,6 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
 
 void TextureRuntime::Recycle(const HostTextureTag tag, ImageAlloc&& alloc) {
     texture_recycler.emplace(tag, std::move(alloc));
-}
-
-void TextureRuntime::FormatConvert(const Surface& surface, bool upload, std::span<std::byte> source,
-                                   std::span<std::byte> dest) {
-    if (!NeedsConvertion(surface.pixel_format)) {
-        std::memcpy(dest.data(), source.data(), source.size());
-        return;
-    }
-
-    if (upload) {
-        switch (surface.pixel_format) {
-        case VideoCore::PixelFormat::RGBA8:
-            return Pica::Texture::ConvertABGRToRGBA(source, dest);
-        case VideoCore::PixelFormat::RGB8:
-            return Pica::Texture::ConvertBGRToRGBA(source, dest);
-        case VideoCore::PixelFormat::RGBA4:
-            return Pica::Texture::ConvertRGBA4ToRGBA8(source, dest);
-        case VideoCore::PixelFormat::D24:
-            return Pica::Texture::ConvertD24ToD32(source, dest);
-        default:
-            break;
-        }
-    } else {
-        switch (surface.pixel_format) {
-        case VideoCore::PixelFormat::RGBA8:
-            return Pica::Texture::ConvertABGRToRGBA(source, dest);
-        case VideoCore::PixelFormat::RGBA4:
-            return Pica::Texture::ConvertRGBA8ToRGBA4(source, dest);
-        case VideoCore::PixelFormat::RGB8:
-            return Pica::Texture::ConvertRGBAToBGR(source, dest);
-        case VideoCore::PixelFormat::D24:
-            return Pica::Texture::ConvertD32ToD24(source, dest);
-        default:
-            break;
-        }
-    }
-
-    LOG_WARNING(Render_Vulkan, "Missing linear format convertion: {} {} {}",
-                vk::to_string(surface.traits.native), upload ? "->" : "<-",
-                vk::to_string(surface.alloc.format));
 }
 
 bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,

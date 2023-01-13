@@ -107,30 +107,30 @@ struct TextureCubeConfig {
 [[nodiscard]] ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_data);
 
 /**
- * Converts a morton swizzled texture to linear format.
+ * Encodes a linear texture to the expected linear or tiled format.
  *
- * @param unswizzle_info Structure used to query the surface information.
- * @param start_addr The start address of the source_tiled data.
- * @param end_addr The end address of the source_tiled data.
- * @param source_tiled The tiled data to convert.
- * @param dest_linear The output buffer where the generated linear data will be written to.
+ * @param surface_info Structure used to query the surface information.
+ * @param start_addr The start address of the dest data. Used if tiled.
+ * @param end_addr The end address of the dest data. Used if tiled.
+ * @param source_tiled The source linear texture data.
+ * @param dest_linear The output buffer where the encoded linear or tiled data will be written to.
+ * @param convert Whether the pixel format needs to be converted.
  */
-void UnswizzleTexture(const SurfaceParams& unswizzle_info, PAddr start_addr, PAddr end_addr,
-                      std::span<std::byte> source_tiled, std::span<std::byte> dest_linear,
-                      bool convert = false);
+void EncodeTexture(const SurfaceParams& surface_info, PAddr start_addr, PAddr end_addr,
+                   std::span<u8> source, std::span<u8> dest, bool convert = false);
 
 /**
- * Swizzles a linear texture according to the morton code.
+ * Decodes a linear or tiled texture to the expected linear format.
  *
- * @param swizzle_info Structure used to query the surface information.
- * @param start_addr The start address of the dest_tiled data.
- * @param end_addr The end address of the dest_tiled data.
- * @param source_tiled The source morton swizzled data.
- * @param dest_linear The output buffer where the generated linear data will be written to.
+ * @param surface_info Structure used to query the surface information.
+ * @param start_addr The start address of the source data. Used if tiled.
+ * @param end_addr The end address of the source data. Used if tiled.
+ * @param source_tiled The source linear or tiled texture data.
+ * @param dest_linear The output buffer where the decoded linear data will be written to.
+ * @param convert Whether the pixel format needs to be converted.
  */
-void SwizzleTexture(const SurfaceParams& swizzle_info, PAddr start_addr, PAddr end_addr,
-                    std::span<std::byte> source_linear, std::span<std::byte> dest_tiled,
-                    bool convert = false);
+void DecodeTexture(const SurfaceParams& surface_info, PAddr start_addr, PAddr end_addr,
+                   std::span<u8> source, std::span<u8> dest, bool convert = false);
 
 } // namespace VideoCore
 

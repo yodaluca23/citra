@@ -3,8 +3,8 @@
 // Refer to the license.txt file included.
 
 #include "common/assert.h"
-#include "video_core/rasterizer_cache/morton_swizzle.h"
 #include "video_core/rasterizer_cache/surface_params.h"
+#include "video_core/rasterizer_cache/texture_codec.h"
 #include "video_core/rasterizer_cache/utils.h"
 #include "video_core/texture/texture_decode.h"
 
@@ -47,32 +47,58 @@ ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_d
     return result;
 }
 
-void SwizzleTexture(const SurfaceParams& swizzle_info, PAddr start_addr, PAddr end_addr,
-                    std::span<std::byte> source_linear, std::span<std::byte> dest_tiled,
-                    bool convert) {
-    const u32 func_index = static_cast<u32>(swizzle_info.pixel_format);
-    const MortonFunc SwizzleImpl = (convert ? SWIZZLE_TABLE_CONVERTED : SWIZZLE_TABLE)[func_index];
-    if (!SwizzleImpl) {
-        LOG_ERROR(Render_Vulkan, "Unimplemented swizzle function for pixel format {}.", func_index);
-        UNREACHABLE();
+void EncodeTexture(const SurfaceParams& surface_info, PAddr start_addr, PAddr end_addr,
+                   std::span<u8> source, std::span<u8> dest, bool convert) {
+    const u32 func_index = static_cast<u32>(surface_info.pixel_format);
+
+    if (surface_info.is_tiled) {
+        const MortonFunc SwizzleImpl =
+            (convert ? SWIZZLE_TABLE_CONVERTED : SWIZZLE_TABLE)[func_index];
+        if (SwizzleImpl) {
+            SwizzleImpl(surface_info.width, surface_info.height, start_addr - surface_info.addr,
+                        end_addr - surface_info.addr, source, dest);
+            return;
+        }
+    } else {
+        const LinearFunc LinearEncodeImpl =
+            (convert ? LINEAR_ENCODE_TABLE_CONVERTED : LINEAR_ENCODE_TABLE)[func_index];
+        if (LinearEncodeImpl) {
+            LinearEncodeImpl(source, dest);
+            return;
+        }
     }
-    SwizzleImpl(swizzle_info.width, swizzle_info.height, start_addr - swizzle_info.addr,
-                end_addr - swizzle_info.addr, source_linear, dest_tiled);
+
+    LOG_ERROR(Render_Vulkan,
+              "Unimplemented texture encode function for pixel format = {}, tiled = {}", func_index,
+              surface_info.is_tiled);
+    UNREACHABLE();
 }
 
-void UnswizzleTexture(const SurfaceParams& unswizzle_info, PAddr start_addr, PAddr end_addr,
-                      std::span<std::byte> source_tiled, std::span<std::byte> dest_linear,
-                      bool convert) {
-    const u32 func_index = static_cast<u32>(unswizzle_info.pixel_format);
-    const MortonFunc UnswizzleImpl =
-        (convert ? UNSWIZZLE_TABLE_CONVERTED : UNSWIZZLE_TABLE)[func_index];
-    if (!UnswizzleImpl) {
-        LOG_ERROR(Render_Vulkan, "Unimplemented un-swizzle function for pixel format {}.",
-                  func_index);
-        UNREACHABLE();
+void DecodeTexture(const SurfaceParams& surface_info, PAddr start_addr, PAddr end_addr,
+                   std::span<u8> source, std::span<u8> dest, bool convert) {
+    const u32 func_index = static_cast<u32>(surface_info.pixel_format);
+
+    if (surface_info.is_tiled) {
+        const MortonFunc UnswizzleImpl =
+            (convert ? UNSWIZZLE_TABLE_CONVERTED : UNSWIZZLE_TABLE)[func_index];
+        if (UnswizzleImpl) {
+            UnswizzleImpl(surface_info.width, surface_info.height, start_addr - surface_info.addr,
+                          end_addr - surface_info.addr, dest, source);
+            return;
+        }
+    } else {
+        const LinearFunc LinearDecodeImpl =
+            (convert ? LINEAR_DECODE_TABLE_CONVERTED : LINEAR_DECODE_TABLE)[func_index];
+        if (LinearDecodeImpl) {
+            LinearDecodeImpl(source, dest);
+            return;
+        }
     }
-    UnswizzleImpl(unswizzle_info.width, unswizzle_info.height, start_addr - unswizzle_info.addr,
-                  end_addr - unswizzle_info.addr, dest_linear, source_tiled);
+
+    LOG_ERROR(Render_Vulkan,
+              "Unimplemented texture decode function for pixel format = {}, tiled = {}", func_index,
+              surface_info.is_tiled);
+    UNREACHABLE();
 }
 
 } // namespace VideoCore

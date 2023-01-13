@@ -22,7 +22,7 @@ struct FormatTuple {
 struct StagingData {
     GLuint buffer;
     u32 size = 0;
-    std::span<std::byte> mapped{};
+    std::span<u8> mapped{};
     GLintptr buffer_offset = 0;
 };
 
@@ -47,10 +47,6 @@ public:
     const FormatTuple& GetFormatTuple(VideoCore::PixelFormat pixel_format);
 
     void Finish() const {}
-
-    /// Performs required format convertions on the staging data
-    void FormatConvert(const Surface& surface, bool upload, std::span<std::byte> source,
-                       std::span<std::byte> dest);
 
     /// Allocates an OpenGL texture with the specified dimentions and format
     OGLTexture Allocate(u32 width, u32 height, VideoCore::PixelFormat format,

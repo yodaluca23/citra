@@ -105,47 +105,36 @@ Common::Vec4<u8> LookupTexelInTile(const u8* source, unsigned int x, unsigned in
     }
 
     case TextureFormat::IA8: {
-        const u8* source_ptr = source + MortonInterleave(x, y) * 2;
-
-        if (disable_alpha) {
-            // Show intensity as red, alpha as green
-            return {source_ptr[1], source_ptr[0], 0, 255};
-        } else {
-            return {source_ptr[1], source_ptr[1], source_ptr[1], source_ptr[0]};
-        }
+        auto res = Common::Color::DecodeIA8(source + MortonInterleave(x, y) * 2);
+        return {res.r(), res.g(), res.b(), static_cast<u8>(disable_alpha ? 255 : res.a())};
     }
 
     case TextureFormat::RG8: {
         auto res = Common::Color::DecodeRG8(source + MortonInterleave(x, y) * 2);
-        return {res.r(), res.g(), 0, 255};
+        return {res.r(), res.g(), res.b(), static_cast<u8>(disable_alpha ? 255 : res.a())};
     }
 
     case TextureFormat::I8: {
-        const u8* source_ptr = source + MortonInterleave(x, y);
-        return {*source_ptr, *source_ptr, *source_ptr, 255};
+        auto res = Common::Color::DecodeI8(source + MortonInterleave(x, y) * 2);
+        return {res.r(), res.g(), res.b(), static_cast<u8>(disable_alpha ? 255 : res.a())};
     }
 
     case TextureFormat::A8: {
-        const u8* source_ptr = source + MortonInterleave(x, y);
-
+        auto res = Common::Color::DecodeA8(source + MortonInterleave(x, y) * 2);
         if (disable_alpha) {
-            return {*source_ptr, *source_ptr, *source_ptr, 255};
+            return {res.a(), res.a(), res.a(), 255};
         } else {
-            return {0, 0, 0, *source_ptr};
+            return res;
         }
     }
 
     case TextureFormat::IA4: {
-        const u8* source_ptr = source + MortonInterleave(x, y);
-
-        u8 i = Common::Color::Convert4To8(((*source_ptr) & 0xF0) >> 4);
-        u8 a = Common::Color::Convert4To8((*source_ptr) & 0xF);
-
+        auto res = Common::Color::DecodeIA4(source + MortonInterleave(x, y) * 2);
         if (disable_alpha) {
             // Show intensity as red, alpha as green
-            return {i, a, 0, 255};
+            return {res.r(), res.a(), 0, 255};
         } else {
-            return {i, i, i, a};
+            return res;
         }
     }
 
@@ -221,141 +210,6 @@ TextureInfo TextureInfo::FromPicaRegister(const TexturingRegs::TextureConfig& co
     info.format = format;
     info.SetDefaultStride();
     return info;
-}
-
-void ConvertBGRToRGB(std::span<const std::byte> source, std::span<std::byte> dest) {
-    for (std::size_t i = 0; i < source.size(); i += 3) {
-        u32 bgr{};
-        std::memcpy(&bgr, source.data() + i, 3);
-        const u32 rgb = Common::swap32(bgr << 8);
-        std::memcpy(dest.data() + i, &rgb, 3);
-    }
-}
-
-void ConvertBGRToRGBA(std::span<const std::byte> source, std::span<std::byte> dest) {
-    u32 j = 0;
-    for (std::size_t i = 0; i < dest.size(); i += 4) {
-        dest[i] = source[j + 2];
-        dest[i + 1] = source[j + 1];
-        dest[i + 2] = source[j];
-        dest[i + 3] = std::byte{0xFF};
-        j += 3;
-    }
-}
-
-void ConvertRGBAToBGR(std::span<const std::byte> source, std::span<std::byte> dest) {
-    u32 j = 0;
-    for (std::size_t i = 0; i < dest.size(); i += 3) {
-        dest[i] = source[j + 2];
-        dest[i + 1] = source[j + 1];
-        dest[i + 2] = source[j];
-        j += 4;
-    }
-}
-
-void ConvertABGRToRGBA(std::span<const std::byte> source, std::span<std::byte> dest) {
-    for (u32 i = 0; i < dest.size(); i += 4) {
-        u32 abgr;
-        std::memcpy(&abgr, source.data() + i, sizeof(u32));
-        const u32 rgba = Common::swap32(abgr);
-        std::memcpy(dest.data() + i, &rgba, 4);
-    }
-}
-
-void ConvertRGBA4ToRGBA8(std::span<const std::byte> source, std::span<std::byte> dest) {
-    u32 j = 0;
-    for (std::size_t i = 0; i < dest.size(); i += 4) {
-        auto rgba = Common::Color::DecodeRGBA4(reinterpret_cast<const u8*>(source.data() + j));
-        std::memcpy(dest.data() + i, rgba.AsArray(), sizeof(rgba));
-        j += 2;
-    }
-}
-
-void ConvertRGBA8ToRGBA4(std::span<const std::byte> source, std::span<std::byte> dest) {
-    u32 j = 0;
-    for (std::size_t i = 0; i < dest.size(); i += 2) {
-        Common::Vec4<u8> rgba;
-        std::memcpy(rgba.AsArray(), source.data() + j, sizeof(rgba));
-        Common::Color::EncodeRGBA4(rgba, reinterpret_cast<u8*>(dest.data() + i));
-        j += 4;
-    }
-}
-
-void ConvertRGB5A1ToRGBA8(std::span<const std::byte> source, std::span<std::byte> dest) {
-    u32 j = 0;
-    for (std::size_t i = 0; i < dest.size(); i += 4) {
-        auto rgba = Common::Color::DecodeRGB5A1(reinterpret_cast<const u8*>(source.data() + j));
-        std::memcpy(dest.data() + i, rgba.AsArray(), sizeof(rgba));
-        j += 2;
-    }
-}
-
-void ConvertRGBA8ToRGB5A1(std::span<const std::byte> source, std::span<std::byte> dest) {
-    u32 j = 0;
-    for (std::size_t i = 0; i < dest.size(); i += 2) {
-        Common::Vec4<u8> rgba;
-        std::memcpy(rgba.AsArray(), source.data() + j, sizeof(rgba));
-        Common::Color::EncodeRGB5A1(rgba, reinterpret_cast<u8*>(dest.data() + i));
-        j += 4;
-    }
-}
-
-void ConvertD24ToD32(std::span<const std::byte> source, std::span<std::byte> dest) {
-    u32 j = 0;
-    for (std::size_t i = 0; i < dest.size(); i += 4) {
-        auto d32 =
-            Common::Color::DecodeD24(reinterpret_cast<const u8*>(source.data() + j)) / 16777215.f;
-        std::memcpy(dest.data() + i, &d32, sizeof(d32));
-        j += 3;
-    }
-}
-
-void ConvertD32ToD24(std::span<const std::byte> source, std::span<std::byte> dest) {
-    u32 j = 0;
-    for (std::size_t i = 0; i < dest.size(); i += 3) {
-        float d32;
-        std::memcpy(&d32, source.data() + j, sizeof(d32));
-        Common::Color::EncodeD24(d32 * 0xFFFFFF, reinterpret_cast<u8*>(dest.data() + i));
-        j += 4;
-    }
-}
-
-void ConvertD32S8ToD24S8(std::span<const std::byte> source, std::span<std::byte> dest) {
-    std::size_t depth_offset = 0;
-    std::size_t stencil_offset = 4 * source.size() / 5;
-    for (std::size_t i = 0; i < dest.size(); i += 4) {
-        float depth;
-        std::memcpy(&depth, source.data() + depth_offset, sizeof(float));
-        u32 depth_uint = depth * 0xFFFFFF;
-
-        dest[i] = source[stencil_offset];
-        std::memcpy(dest.data() + i + 1, &depth_uint, 3);
-
-        depth_offset += 4;
-        stencil_offset += 1;
-    }
-}
-
-void InterleaveD24S8(std::span<const std::byte> source, std::span<std::byte> dest) {
-    std::size_t depth_offset = 0;
-    std::size_t stencil_offset = 3 * source.size() / 4;
-    for (std::size_t i = 0; i < dest.size(); i += 4) {
-        dest[i] = source[stencil_offset];
-        std::memcpy(dest.data() + i + 1, source.data() + depth_offset, 3);
-        depth_offset += 3;
-        stencil_offset += 1;
-    }
-}
-
-void DeinterleaveD24S8(std::span<const std::byte> source, std::span<std::byte> dest) {
-    std::size_t depth_offset = 0;
-    std::size_t stencil_offset = 3 * source.size() / 4;
-    for (std::size_t i = 0; i < dest.size(); i += 4) {
-        dest[stencil_offset] = source[i];
-        std::memcpy(dest.data() + depth_offset, source.data() + i + 1, 3);
-        depth_offset += 3;
-        stencil_offset += 1;
-    }
 }
 
 } // namespace Pica::Texture

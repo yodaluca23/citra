@@ -21,7 +21,7 @@ namespace Vulkan {
 struct StagingData {
     vk::Buffer buffer;
     u32 size = 0;
-    std::span<std::byte> mapped{};
+    std::span<u8> mapped{};
     u64 buffer_offset = 0;
 };
 
@@ -107,10 +107,6 @@ public:
     [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, VideoCore::PixelFormat pixel_format,
                                       VideoCore::TextureType type, vk::Format format,
                                       vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect);
-
-    /// Performs required format convertions on the staging data
-    void FormatConvert(const Surface& surface, bool upload, std::span<std::byte> source,
-                       std::span<std::byte> dest);
 
     /// Fills the rectangle of the texture with the clear value provided
     bool ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
