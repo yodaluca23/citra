@@ -308,13 +308,16 @@ static constexpr void MortonCopy(u32 width, u32 height, u32 start_offset, u32 en
         LinearNextTile();
     }
 
-    const u32 buffer_end = tiled_offset + aligned_end_offset - aligned_start_offset;
-    while (tiled_offset < buffer_end) {
-        auto linear_data = linear_buffer.subspan(linear_offset, linear_tile_stride);
-        auto tiled_data = tiled_buffer.subspan(tiled_offset, tile_size);
-        MortonCopyTile<morton_to_linear, format, converted>(width, tiled_data, linear_data);
-        tiled_offset += tile_size;
-        LinearNextTile();
+    // If the copy spans multiple tiles, copy the fully aligned tiles in between.
+    if (aligned_start_offset < aligned_end_offset) {
+        const u32 buffer_end = tiled_offset + aligned_end_offset - aligned_start_offset;
+        while (tiled_offset < buffer_end) {
+            auto linear_data = linear_buffer.subspan(linear_offset, linear_tile_stride);
+            auto tiled_data = tiled_buffer.subspan(tiled_offset, tile_size);
+            MortonCopyTile<morton_to_linear, format, converted>(width, tiled_data, linear_data);
+            tiled_offset += tile_size;
+            LinearNextTile();
+        }
     }
 
     // If during a texture download the end coordinate is not tile aligned, swizzle
