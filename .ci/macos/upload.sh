@@ -23,7 +23,7 @@ CITRA_STANDALONE_PATH="$REV_NAME/citra"
 # move libs into folder for deployment
 macpack $BUNDLE_EXECUTABLE_PATH -d "../Frameworks"
 # move qt frameworks into app bundle for deployment
-$(brew --prefix)/opt/qt5/bin/macdeployqt $BUNDLE_PATH -executable=$BUNDLE_EXECUTABLE_PATH
+macdeployqt $BUNDLE_PATH -executable=$BUNDLE_EXECUTABLE_PATH
 
 # move libs into folder for deployment
 macpack $CITRA_STANDALONE_PATH -d "libs"

@@ -29,25 +29,38 @@ set(CATCH_INSTALL_EXTRAS OFF)
 add_subdirectory(catch2)
 
 # Crypto++
-add_subdirectory(cryptopp)
+set(CRYPTOPP_BUILD_DOCUMENTATION OFF)
+set(CRYPTOPP_BUILD_TESTING OFF)
+set(CRYPTOPP_INSTALL OFF)
+add_subdirectory(cryptopp-cmake)
+
+# HACK: The logic to set up the base include directory for CryptoPP does not work with Android SDK CMake 3.22.1.
+# Until there is a fixed version available, this code will detect and add in the proper include if it does not exist.
+if(ANDROID)
+    message(STATUS "Applying CryptoPP include fix.")
+    get_target_property(CRYPTOPP_INCLUDES cryptopp INTERFACE_INCLUDE_DIRECTORIES)
+    foreach(CRYPTOPP_INCLUDE ${CRYPTOPP_INCLUDES})
+        if("${CRYPTOPP_INCLUDE}" MATCHES "\\$<BUILD_INTERFACE:(.*)/cryptopp>")
+            message(STATUS "Fixed include path: ${CMAKE_MATCH_1}")
+            target_include_directories(cryptopp PUBLIC $<BUILD_INTERFACE:${CMAKE_MATCH_1}>)
+            break()
+        endif()
+    endforeach()
+endif()
 
 # fmt and Xbyak need to be added before dynarmic
 # libfmt
+option(FMT_INSTALL "" ON)
 add_subdirectory(fmt)
 
 # Xbyak
-if (ARCHITECTURE_x86_64)
-    add_library(xbyak INTERFACE)
-    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/xbyak/include)
-    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/xbyak/xbyak DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/xbyak/include)
-    target_include_directories(xbyak SYSTEM INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/xbyak/include)
-    target_compile_definitions(xbyak INTERFACE XBYAK_NO_OP_NAMES)
+if ("x86_64" IN_LIST ARCHITECTURE)
+    add_subdirectory(xbyak)
 endif()
 
 # Dynarmic
-if (ARCHITECTURE_x86_64 OR ARCHITECTURE_arm64)
+if ("x86_64" IN_LIST ARCHITECTURE OR "arm64" IN_LIST ARCHITECTURE)
     set(DYNARMIC_TESTS OFF)
-    set(DYNARMIC_NO_BUNDLED_FMT ON)
     set(DYNARMIC_FRONTENDS "A32")
     add_subdirectory(dynarmic)
 endif()

@@ -129,6 +129,10 @@ add_library(video_core STATIC
     shader/shader_cache.h
     shader/shader_interpreter.cpp
     shader/shader_interpreter.h
+    shader/shader_jit_x64.cpp
+    shader/shader_jit_x64_compiler.cpp
+    shader/shader_jit_x64.h
+    shader/shader_jit_x64_compiler.h
     shader/shader_uniforms.cpp
     shader/shader_uniforms.h
     swrasterizer/clipper.cpp
@@ -158,17 +162,6 @@ add_library(video_core STATIC
 
 target_include_directories(video_core PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
-if(ARCHITECTURE_x86_64)
-    target_sources(video_core
-        PRIVATE
-            shader/shader_jit_x64.cpp
-            shader/shader_jit_x64_compiler.cpp
-
-            shader/shader_jit_x64.h
-            shader/shader_jit_x64_compiler.h
-    )
-endif()
-
 create_target_directory_groups(video_core)
 
 # Ignore nullability warnings generated from VMA
@@ -184,7 +177,7 @@ target_include_directories(video_core PRIVATE ${HOST_SHADERS_INCLUDE})
 target_link_libraries(video_core PRIVATE vulkan-headers vma sirit SPIRV glslang glad)
 target_link_libraries(video_core PRIVATE nihstro-headers Boost::serialization glm::glm)
 
-if (ARCHITECTURE_x86_64)
+if ("x86_64" IN_LIST ARCHITECTURE)
     target_link_libraries(video_core PUBLIC xbyak)
 endif()
 

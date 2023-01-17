@@ -54,6 +54,7 @@
 #include "citra_qt/uisettings.h"
 #include "citra_qt/updater/updater.h"
 #include "citra_qt/util/clickable_label.h"
+#include "common/arch.h"
 #include "common/common_paths.h"
 #include "common/detached_tasks.h"
 #include "common/file_util.h"
@@ -65,7 +66,7 @@
 #include "common/scm_rev.h"
 #include "common/scope_exit.h"
 #include "common/string_util.h"
-#ifdef ARCHITECTURE_x86_64
+#if CITRA_ARCH(x86_64)
 #include "common/x64/cpu_detect.h"
 #endif
 #include "common/settings.h"
@@ -200,7 +201,7 @@ GMainWindow::GMainWindow()
 
     LOG_INFO(Frontend, "Citra Version: {} | {}-{}", Common::g_build_fullname, Common::g_scm_branch,
              Common::g_scm_desc);
-#ifdef ARCHITECTURE_x86_64
+#if CITRA_ARCH(x86_64)
     const auto& caps = Common::GetCPUCaps();
     std::string cpu_string = caps.cpu_string;
     if (caps.avx || caps.avx2 || caps.avx512) {
@@ -2288,6 +2289,7 @@ void GMainWindow::OnCoreError(Core::System::ResultStatus result, std::string det
     QString status_message;
 
     QString title, message;
+    QMessageBox::Icon error_severity_icon;
     if (result == Core::System::ResultStatus::ErrorSystemFiles) {
         const QString common_message =
             tr("%1 is missing. Please <a "
@@ -2303,9 +2305,11 @@ void GMainWindow::OnCoreError(Core::System::ResultStatus result, std::string det
 
         title = tr("System Archive Not Found");
         status_message = tr("System Archive Missing");
+        error_severity_icon = QMessageBox::Icon::Critical;
     } else if (result == Core::System::ResultStatus::ErrorSavestate) {
         title = tr("Save/load Error");
         message = QString::fromStdString(details);
+        error_severity_icon = QMessageBox::Icon::Warning;
     } else {
         title = tr("Fatal Error");
         message =
@@ -2314,30 +2318,39 @@ void GMainWindow::OnCoreError(Core::System::ResultStatus result, std::string det
                "the log</a> for details."
                "<br/>Continuing emulation may result in crashes and bugs.");
         status_message = tr("Fatal Error encountered");
+        error_severity_icon = QMessageBox::Icon::Critical;
     }
 
     QMessageBox message_box;
     message_box.setWindowTitle(title);
     message_box.setText(message);
-    message_box.setIcon(QMessageBox::Icon::Critical);
-    message_box.addButton(tr("Continue"), QMessageBox::RejectRole);
-    QPushButton* abort_button = message_box.addButton(tr("Abort"), QMessageBox::AcceptRole);
-    if (result != Core::System::ResultStatus::ShutdownRequested)
-        message_box.exec();
+    message_box.setIcon(error_severity_icon);
+    if (error_severity_icon == QMessageBox::Icon::Critical) {
+        message_box.addButton(tr("Continue"), QMessageBox::RejectRole);
+        QPushButton* abort_button = message_box.addButton(tr("Quit Game"), QMessageBox::AcceptRole);
+        if (result != Core::System::ResultStatus::ShutdownRequested)
+            message_box.exec();
 
-    if (result == Core::System::ResultStatus::ShutdownRequested ||
-        message_box.clickedButton() == abort_button) {
-        if (emu_thread) {
-            ShutdownGame();
+        if (result == Core::System::ResultStatus::ShutdownRequested ||
+            message_box.clickedButton() == abort_button) {
+            if (emu_thread) {
+                ShutdownGame();
+                return;
+            }
         }
     } else {
-        // Only show the message if the game is still running.
-        if (emu_thread) {
-            emu_thread->SetRunning(true);
-            message_label->setText(status_message);
-            message_label->setVisible(true);
-            message_label_used_for_movie = false;
-        }
+        // This block should run when the error isn't too big of a deal
+        // e.g. when a save state can't be saved or loaded
+        message_box.addButton(tr("OK"), QMessageBox::RejectRole);
+        message_box.exec();
+    }
+
+    // Only show the message if the game is still running.
+    if (emu_thread) {
+        emu_thread->SetRunning(true);
+        message_label->setText(status_message);
+        message_label->setVisible(true);
+        message_label_used_for_movie = false;
     }
 }
 
