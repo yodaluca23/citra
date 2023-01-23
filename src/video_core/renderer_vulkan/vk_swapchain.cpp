@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #include <algorithm>
+#include <limits>
 #include "common/logging/log.h"
 #include "common/microprofile.h"
 #include "common/settings.h"
@@ -73,8 +74,8 @@ void Swapchain::Create(vk::SurfaceKHR new_surface) {
         UNREACHABLE();
     }
 
-    RefreshSemaphores();
     SetupImages();
+    RefreshSemaphores();
     resource_ticks.clear();
     resource_ticks.resize(image_count);
 
@@ -86,8 +87,9 @@ MICROPROFILE_DEFINE(Vulkan_Acquire, "Vulkan", "Swapchain Acquire", MP_RGB(185, 6
 void Swapchain::AcquireNextImage() {
     MICROPROFILE_SCOPE(Vulkan_Acquire);
     vk::Device device = instance.GetDevice();
-    vk::Result result = device.acquireNextImageKHR(
-        swapchain, UINT64_MAX, image_acquired[frame_index], VK_NULL_HANDLE, &image_index);
+    vk::Result result =
+        device.acquireNextImageKHR(swapchain, std::numeric_limits<u64>::max(),
+                                   image_acquired[frame_index], VK_NULL_HANDLE, &image_index);
 
     switch (result) {
     case vk::Result::eSuccess:
@@ -99,7 +101,7 @@ void Swapchain::AcquireNextImage() {
         is_outdated = true;
         break;
     default:
-        LOG_ERROR(Render_Vulkan, "vkAcquireNextImageKHR returned unknown result {}", result);
+        ASSERT_MSG(false, "vkAcquireNextImageKHR returned unknown result {}", result);
         break;
     }
 
@@ -204,7 +206,7 @@ void Swapchain::SetSurfaceProperties() {
         image_count = std::min(image_count, capabilities.maxImageCount);
     }
 
-    LOG_INFO(Render_Vulkan, "Using {} images", image_count);
+    LOG_INFO(Render_Vulkan, "Requesting {} images", image_count);
 
     // Prefer identity transform if possible
     transform = vk::SurfaceTransformFlagBitsKHR::eIdentity;
@@ -259,6 +261,8 @@ void Swapchain::RefreshSemaphores() {
 void Swapchain::SetupImages() {
     vk::Device device = instance.GetDevice();
     images = device.getSwapchainImagesKHR(swapchain);
+    image_count = static_cast<u32>(images.size());
+    LOG_INFO(Render_Vulkan, "Using {} images", image_count);
 
     for (const vk::Image image : images) {
         const vk::ImageViewCreateInfo view_info = {

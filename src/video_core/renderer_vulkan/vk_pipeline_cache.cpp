@@ -176,7 +176,8 @@ bool PipelineCache::GraphicsPipeline::Build(bool fail_on_compile_required) {
         const VertexAttribute& attrib = info.vertex_layout.attributes[i];
         const vk::Format format = ToVkAttributeFormat(attrib.type, attrib.size);
         const bool is_supported = IsAttribFormatSupported(attrib, instance);
-        ASSERT_MSG(is_supported || attrib.size == 3);
+        ASSERT_MSG(is_supported || attrib.size == 3, "Failed attrib is_supported {} size {}",
+                   is_supported, attrib.size);
 
         attributes[i] = vk::VertexInputAttributeDescription{
             .location = attrib.location,
