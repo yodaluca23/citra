@@ -787,13 +787,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                                    depth_surface);
     }
 
-    static int submit_threshold = 20;
-    submit_threshold--;
-    if (!submit_threshold) {
-        submit_threshold = 20;
-        scheduler.DispatchWork();
-    }
-
     return succeeded;
 }
 

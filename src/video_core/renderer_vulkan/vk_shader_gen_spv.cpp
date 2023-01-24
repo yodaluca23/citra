@@ -2,10 +2,8 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#include "common/microprofile.h"
 #include "core/core.h"
 #include "video_core/renderer_vulkan/vk_shader_gen_spv.h"
-#include "video_core/shader/shader_uniforms.h"
 
 using Pica::FramebufferRegs;
 using Pica::LightingRegs;
@@ -43,7 +41,7 @@ void FragmentModule::Generate() {
     }
 
     // Check if the fragment is outside scissor rectangle
-    // WriteScissor();
+    WriteScissor();
 
     // Write shader bytecode to emulate all enabled PICA lights
     if (config.state.lighting.enable) {
@@ -130,9 +128,7 @@ void FragmentModule::WriteScissor() {
         return;
     }
 
-    const Id input_pointer_id{TypePointer(spv::StorageClass::Input, vec_ids.Get(4))};
-    const Id input_pointer{OpAccessChain(input_pointer_id, gl_frag_coord_id)};
-    const Id gl_frag_coord{OpLoad(vec_ids.Get(4), input_pointer)};
+    const Id gl_frag_coord{OpLoad(vec_ids.Get(4), gl_frag_coord_id)};
     const Id gl_frag_coord_xy{OpVectorShuffle(vec_ids.Get(2), gl_frag_coord, gl_frag_coord, 0, 1)};
 
     const Id scissor_x1{GetShaderDataMember(i32_id, ConstS32(6))};
