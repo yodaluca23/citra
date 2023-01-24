@@ -4,10 +4,10 @@
 
 #pragma once
 
-#include <array>
 #include <span>
 #include <vector>
 #include "video_core/rasterizer_cache/pixel_format.h"
+#include "video_core/regs_pipeline.h"
 #include "video_core/renderer_vulkan/vk_common.h"
 
 namespace Frontend {
@@ -38,7 +38,11 @@ public:
     ~Instance();
 
     /// Returns the FormatTraits struct for the provided pixel format
-    FormatTraits GetTraits(VideoCore::PixelFormat pixel_format) const;
+    const FormatTraits& GetTraits(VideoCore::PixelFormat pixel_format) const;
+
+    /// Returns the FormatTraits struct for the provided attribute format and count
+    const FormatTraits& GetTraits(Pica::PipelineRegs::VertexAttributeFormat format,
+                                  u32 count) const;
 
     /// Returns the Vulkan instance
     vk::Instance GetInstance() const {
@@ -220,6 +224,9 @@ private:
     /// Creates the format compatibility table for the current device
     void CreateFormatTable();
 
+    /// Creates the attribute format table for the current device
+    void CreateAttribTable();
+
     /// Creates the logical device opportunistically enabling extensions
     bool CreateDevice();
 
@@ -247,10 +254,10 @@ private:
     vk::Queue graphics_queue;
     std::vector<vk::PhysicalDevice> physical_devices;
     std::array<FormatTraits, VideoCore::PIXEL_FORMAT_COUNT> format_table;
+    std::array<FormatTraits, 16> attrib_table;
     std::vector<std::string> available_extensions;
     u32 present_queue_family_index{0};
     u32 graphics_queue_family_index{0};
-
     bool triangle_fan_supported{true};
     u32 min_vertex_stride_alignment{1};
     bool timeline_semaphores{};

@@ -155,10 +155,9 @@ struct PicaShaderConfigCommon {
     u64 swizzle_hash;
     u32 main_offset;
     bool sanitize_mul;
-    std::array<Pica::PipelineRegs::VertexAttributeFormat, 16> attrib_types;
-    std::array<u8, 16> emulated_attrib_locations;
 
     u32 num_outputs;
+    std::array<char, 16> attrib_prefix; ///< Type prefix for casted attributes
 
     // output_map[output register index] -> output attribute index
     std::array<u32, 16> output_map;
@@ -184,9 +183,6 @@ struct PicaVSConfig : Common::HashableStruct<PicaShaderConfigCommon> {
     explicit PicaVSConfig(const Pica::RasterizerRegs& rasterizer, const Pica::ShaderRegs& regs,
                           Pica::Shader::ShaderSetup& setup) {
         state.Init(rasterizer, regs, setup);
-    }
-    explicit PicaVSConfig(const PicaShaderConfigCommon& conf) {
-        state = conf;
     }
 };
 

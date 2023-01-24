@@ -41,25 +41,25 @@ VideoCore::PixelFormat ToFormatDepth(u32 index) {
 
 RenderpassCache::RenderpassCache(const Instance& instance, Scheduler& scheduler)
     : instance{instance}, scheduler{scheduler} {
-    // Pre-create all needed renderpasses by the renderer
+
     for (u32 color = 0; color <= MAX_COLOR_FORMATS; color++) {
         for (u32 depth = 0; depth <= MAX_DEPTH_FORMATS; depth++) {
-            const FormatTraits color_traits = instance.GetTraits(ToFormatColor(color));
-            const FormatTraits depth_traits = instance.GetTraits(ToFormatDepth(depth));
-
-            const vk::Format color_format = color_traits.native;
-            const vk::Format depth_format = depth_traits.native;
-
-            if (color_format == vk::Format::eUndefined && depth_format == vk::Format::eUndefined) {
+            const VideoCore::PixelFormat color_format = ToFormatColor(color);
+            const VideoCore::PixelFormat depth_format = ToFormatDepth(depth);
+            if (color_format == VideoCore::PixelFormat::Invalid &&
+                depth_format == VideoCore::PixelFormat::Invalid) {
                 continue;
             }
 
-            cached_renderpasses[color][depth][0] =
-                CreateRenderPass(color_format, depth_format, vk::AttachmentLoadOp::eLoad,
-                                 vk::ImageLayout::eGeneral, vk::ImageLayout::eGeneral);
-            cached_renderpasses[color][depth][1] =
-                CreateRenderPass(color_format, depth_format, vk::AttachmentLoadOp::eClear,
-                                 vk::ImageLayout::eGeneral, vk::ImageLayout::eGeneral);
+            const FormatTraits& color_traits = instance.GetTraits(color_format);
+            const FormatTraits& depth_traits = instance.GetTraits(depth_format);
+
+            cached_renderpasses[color][depth][0] = CreateRenderPass(
+                color_traits.native, depth_traits.native, vk::AttachmentLoadOp::eLoad,
+                vk::ImageLayout::eGeneral, vk::ImageLayout::eGeneral);
+            cached_renderpasses[color][depth][1] = CreateRenderPass(
+                color_traits.native, depth_traits.native, vk::AttachmentLoadOp::eClear,
+                vk::ImageLayout::eGeneral, vk::ImageLayout::eGeneral);
         }
     }
 }

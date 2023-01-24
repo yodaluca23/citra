@@ -82,7 +82,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugReportCallback(VkDebugReportFlagsEXT 
     return VK_FALSE;
 }
 
-vk::Format ToVkFormat(VideoCore::PixelFormat format) {
+vk::Format MakeFormat(VideoCore::PixelFormat format) {
     switch (format) {
     case VideoCore::PixelFormat::RGBA8:
         return vk::Format::eR8G8B8A8Unorm;
@@ -104,9 +104,53 @@ vk::Format ToVkFormat(VideoCore::PixelFormat format) {
         LOG_ERROR(Render_Vulkan, "Unknown texture format {}!", format);
         return vk::Format::eUndefined;
     default:
-        // Use default case for the texture formats
-        return vk::Format::eR8G8B8A8Unorm;
+        return vk::Format::eR8G8B8A8Unorm; ///< Use default case for the texture formats
     }
+}
+
+vk::Format MakeAttributeFormat(Pica::PipelineRegs::VertexAttributeFormat format, u32 count,
+                               bool scaled = true) {
+    static constexpr std::array attrib_formats_scaled = {
+        vk::Format::eR8Sscaled,        vk::Format::eR8G8Sscaled,
+        vk::Format::eR8G8B8Sscaled,    vk::Format::eR8G8B8A8Sscaled,
+        vk::Format::eR8Uscaled,        vk::Format::eR8G8Uscaled,
+        vk::Format::eR8G8B8Uscaled,    vk::Format::eR8G8B8A8Uscaled,
+        vk::Format::eR16Sscaled,       vk::Format::eR16G16Sscaled,
+        vk::Format::eR16G16B16Sscaled, vk::Format::eR16G16B16A16Sscaled,
+        vk::Format::eR32Sfloat,        vk::Format::eR32G32Sfloat,
+        vk::Format::eR32G32B32Sfloat,  vk::Format::eR32G32B32A32Sfloat,
+    };
+    static constexpr std::array attrib_formats_int = {
+        vk::Format::eR8Sint,          vk::Format::eR8G8Sint,
+        vk::Format::eR8G8B8Sint,      vk::Format::eR8G8B8A8Sint,
+        vk::Format::eR8Uint,          vk::Format::eR8G8Uint,
+        vk::Format::eR8G8B8Uint,      vk::Format::eR8G8B8A8Uint,
+        vk::Format::eR16Sint,         vk::Format::eR16G16Sint,
+        vk::Format::eR16G16B16Sint,   vk::Format::eR16G16B16A16Sint,
+        vk::Format::eR32Sfloat,       vk::Format::eR32G32Sfloat,
+        vk::Format::eR32G32B32Sfloat, vk::Format::eR32G32B32A32Sfloat,
+    };
+
+    const u32 index = static_cast<u32>(format);
+    return (scaled ? attrib_formats_scaled : attrib_formats_int)[index * 4 + count - 1];
+}
+
+vk::ImageAspectFlags MakeAspect(VideoCore::SurfaceType type) {
+    switch (type) {
+    case VideoCore::SurfaceType::Color:
+    case VideoCore::SurfaceType::Texture:
+    case VideoCore::SurfaceType::Fill:
+        return vk::ImageAspectFlagBits::eColor;
+    case VideoCore::SurfaceType::Depth:
+        return vk::ImageAspectFlagBits::eDepth;
+    case VideoCore::SurfaceType::DepthStencil:
+        return vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
+    default:
+        LOG_CRITICAL(Render_Vulkan, "Invalid surface type {}", type);
+        UNREACHABLE();
+    }
+
+    return vk::ImageAspectFlagBits::eColor;
 }
 
 [[nodiscard]] vk::DebugUtilsMessengerCreateInfoEXT MakeDebugUtilsMessengerInfo() {
@@ -306,6 +350,7 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
 
     CreateDevice();
     CreateFormatTable();
+    CreateAttribTable();
     CollectTelemetryParameters();
 }
 
@@ -325,31 +370,24 @@ Instance::~Instance() {
     instance.destroy();
 }
 
-FormatTraits Instance::GetTraits(VideoCore::PixelFormat pixel_format) const {
+const FormatTraits& Instance::GetTraits(VideoCore::PixelFormat pixel_format) const {
     if (pixel_format == VideoCore::PixelFormat::Invalid) [[unlikely]] {
-        return FormatTraits{};
+        constexpr static FormatTraits null_traits{};
+        return null_traits;
     }
 
     const u32 index = static_cast<u32>(pixel_format);
     return format_table[index];
 }
 
-vk::ImageAspectFlags MakeAspect(VideoCore::SurfaceType type) {
-    switch (type) {
-    case VideoCore::SurfaceType::Color:
-    case VideoCore::SurfaceType::Texture:
-    case VideoCore::SurfaceType::Fill:
-        return vk::ImageAspectFlagBits::eColor;
-    case VideoCore::SurfaceType::Depth:
-        return vk::ImageAspectFlagBits::eDepth;
-    case VideoCore::SurfaceType::DepthStencil:
-        return vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
-    default:
-        LOG_CRITICAL(Render_Vulkan, "Invalid surface type {}", type);
-        UNREACHABLE();
+const FormatTraits& Instance::GetTraits(Pica::PipelineRegs::VertexAttributeFormat format,
+                                        u32 count) const {
+    if (count == 0) [[unlikely]] {
+        ASSERT_MSG(false, "Unable to retrieve traits for invalid attribute component count");
     }
 
-    return vk::ImageAspectFlagBits::eColor;
+    const u32 index = static_cast<u32>(format);
+    return attrib_table[index * 4 + count - 1];
 }
 
 FormatTraits Instance::DetermineTraits(VideoCore::PixelFormat pixel_format, vk::Format format) {
@@ -417,10 +455,11 @@ void Instance::CreateFormatTable() {
         VideoCore::PixelFormat::I4,     VideoCore::PixelFormat::A4,
         VideoCore::PixelFormat::ETC1,   VideoCore::PixelFormat::ETC1A4,
         VideoCore::PixelFormat::D16,    VideoCore::PixelFormat::D24,
-        VideoCore::PixelFormat::D24S8};
+        VideoCore::PixelFormat::D24S8,
+    };
 
     for (const auto& pixel_format : pixel_formats) {
-        const auto format = ToVkFormat(pixel_format);
+        const auto format = MakeFormat(pixel_format);
         FormatTraits traits = DetermineTraits(pixel_format, format);
 
         const bool is_suitable =
@@ -445,6 +484,40 @@ void Instance::CreateFormatTable() {
 
         const u32 index = static_cast<u32>(pixel_format);
         format_table[index] = traits;
+    }
+}
+
+void Instance::CreateAttribTable() {
+    constexpr std::array attrib_formats = {
+        Pica::PipelineRegs::VertexAttributeFormat::BYTE,
+        Pica::PipelineRegs::VertexAttributeFormat::UBYTE,
+        Pica::PipelineRegs::VertexAttributeFormat::SHORT,
+        Pica::PipelineRegs::VertexAttributeFormat::FLOAT,
+    };
+
+    for (const auto& format : attrib_formats) {
+        for (u32 count = 1; count <= 4; count++) {
+            bool needs_cast{false};
+            vk::Format attrib_format = MakeAttributeFormat(format, count);
+            vk::FormatProperties format_properties =
+                physical_device.getFormatProperties(attrib_format);
+            if (!(format_properties.bufferFeatures & vk::FormatFeatureFlagBits::eVertexBuffer)) {
+                needs_cast = true;
+                attrib_format = MakeAttributeFormat(format, count, false);
+                format_properties = physical_device.getFormatProperties(attrib_format);
+                if (!(format_properties.bufferFeatures &
+                      vk::FormatFeatureFlagBits::eVertexBuffer)) {
+                    ASSERT_MSG(false, "Fallback format {} unsupported, device unsuitable!",
+                               vk::to_string(attrib_format));
+                }
+            }
+
+            const u32 index = static_cast<u32>(format) * 4 + count - 1;
+            attrib_table[index] = FormatTraits{
+                .requires_conversion = needs_cast,
+                .native = attrib_format,
+            };
+        }
     }
 }
 
