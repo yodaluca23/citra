@@ -45,17 +45,19 @@ union DepthStencilState {
     BitField<15, 3, Pica::FramebufferRegs::CompareFunc> stencil_compare_op;
 };
 
-union BlendingState {
-    u32 value = 0;
-    BitField<0, 1, u32> blend_enable;
-    BitField<1, 4, Pica::FramebufferRegs::BlendFactor> src_color_blend_factor;
-    BitField<5, 4, Pica::FramebufferRegs::BlendFactor> dst_color_blend_factor;
-    BitField<9, 3, Pica::FramebufferRegs::BlendEquation> color_blend_eq;
-    BitField<12, 4, Pica::FramebufferRegs::BlendFactor> src_alpha_blend_factor;
-    BitField<16, 4, Pica::FramebufferRegs::BlendFactor> dst_alpha_blend_factor;
-    BitField<20, 3, Pica::FramebufferRegs::BlendEquation> alpha_blend_eq;
-    BitField<23, 4, u32> color_write_mask;
-    BitField<27, 4, Pica::FramebufferRegs::LogicOp> logic_op;
+struct BlendingState {
+    u16 blend_enable;
+    u16 color_write_mask;
+    Pica::FramebufferRegs::LogicOp logic_op;
+    union {
+        u32 value = 0;
+        BitField<0, 4, Pica::FramebufferRegs::BlendFactor> src_color_blend_factor;
+        BitField<4, 4, Pica::FramebufferRegs::BlendFactor> dst_color_blend_factor;
+        BitField<8, 3, Pica::FramebufferRegs::BlendEquation> color_blend_eq;
+        BitField<11, 4, Pica::FramebufferRegs::BlendFactor> src_alpha_blend_factor;
+        BitField<15, 4, Pica::FramebufferRegs::BlendFactor> dst_alpha_blend_factor;
+        BitField<19, 3, Pica::FramebufferRegs::BlendEquation> alpha_blend_eq;
+    };
 };
 
 struct DynamicState {
@@ -90,20 +92,27 @@ struct VertexLayout {
     std::array<VertexAttribute, MAX_VERTEX_ATTRIBUTES> attributes;
 };
 
+struct AttachmentInfo {
+    VideoCore::PixelFormat color_format;
+    VideoCore::PixelFormat depth_format;
+};
+
 /**
  * Information about a graphics/compute pipeline
  */
 struct PipelineInfo {
     VertexLayout vertex_layout{};
     BlendingState blending{};
-    VideoCore::PixelFormat color_attachment = VideoCore::PixelFormat::RGBA8;
-    VideoCore::PixelFormat depth_attachment = VideoCore::PixelFormat::D24S8;
+    AttachmentInfo attachments{};
     RasterizationState rasterization{};
     DepthStencilState depth_stencil{};
     DynamicState dynamic;
 
+    /// Returns the hash of the info structure
+    u64 Hash(const Instance& instance) const;
+
     [[nodiscard]] bool IsDepthWriteEnabled() const noexcept {
-        const bool has_stencil = depth_attachment == VideoCore::PixelFormat::D24S8;
+        const bool has_stencil = attachments.depth_format == VideoCore::PixelFormat::D24S8;
         const bool depth_write =
             depth_stencil.depth_test_enable && depth_stencil.depth_write_enable;
         const bool stencil_write =

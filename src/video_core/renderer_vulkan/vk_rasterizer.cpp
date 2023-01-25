@@ -467,7 +467,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     const bool shadow_rendering = regs.framebuffer.IsShadowRendering();
     const bool has_stencil = regs.framebuffer.HasStencil();
 
-    const bool write_color_fb = shadow_rendering || pipeline_info.blending.color_write_mask.Value();
+    const bool write_color_fb = shadow_rendering || pipeline_info.blending.color_write_mask;
     const bool write_depth_fb = pipeline_info.IsDepthWriteEnabled();
     const bool using_color_fb =
         regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress() != 0 && write_color_fb;
@@ -485,9 +485,9 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         return true;
     }
 
-    pipeline_info.color_attachment =
+    pipeline_info.attachments.color_format =
         color_surface ? color_surface->pixel_format : VideoCore::PixelFormat::Invalid;
-    pipeline_info.depth_attachment =
+    pipeline_info.attachments.depth_format =
         depth_surface ? depth_surface->pixel_format : VideoCore::PixelFormat::Invalid;
 
     const u16 res_scale = color_surface != nullptr
@@ -693,8 +693,8 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     const FramebufferInfo framebuffer_info = {
         .color = color_surface ? color_surface->GetFramebufferView() : VK_NULL_HANDLE,
         .depth = depth_surface ? depth_surface->GetFramebufferView() : VK_NULL_HANDLE,
-        .renderpass = renderpass_cache.GetRenderpass(pipeline_info.color_attachment,
-                                                     pipeline_info.depth_attachment, false),
+        .renderpass = renderpass_cache.GetRenderpass(pipeline_info.attachments.color_format,
+                                                     pipeline_info.attachments.depth_format, false),
         .width = width,
         .height = height,
     };
@@ -1149,8 +1149,8 @@ void RasterizerVulkan::SyncCullMode() {
 }
 
 void RasterizerVulkan::SyncBlendEnabled() {
-    pipeline_info.blending.blend_enable.Assign(
-        Pica::g_state.regs.framebuffer.output_merger.alphablend_enable);
+    pipeline_info.blending.blend_enable =
+        Pica::g_state.regs.framebuffer.output_merger.alphablend_enable;
 }
 
 void RasterizerVulkan::SyncBlendFuncs() {
@@ -1182,7 +1182,7 @@ void RasterizerVulkan::SyncLogicOp() {
     }
 
     const auto& regs = Pica::g_state.regs;
-    pipeline_info.blending.logic_op.Assign(regs.framebuffer.output_merger.logic_op);
+    pipeline_info.blending.logic_op = regs.framebuffer.output_merger.logic_op;
 
     const bool is_logic_op_emulated =
         instance.NeedsLogicOpEmulation() && !regs.framebuffer.output_merger.alphablend_enable;
@@ -1191,7 +1191,7 @@ void RasterizerVulkan::SyncLogicOp() {
     if (is_logic_op_emulated && is_logic_op_noop) {
         // Color output is disabled by logic operation. We use color write mask to skip
         // color but allow depth write.
-        pipeline_info.blending.color_write_mask.Assign(0);
+        pipeline_info.blending.color_write_mask = 0;
     }
 }
 
@@ -1211,7 +1211,7 @@ void RasterizerVulkan::SyncColorWriteMask() {
         return;
     }
 
-    pipeline_info.blending.color_write_mask.Assign(color_mask);
+    pipeline_info.blending.color_write_mask = color_mask;
 }
 
 void RasterizerVulkan::SyncStencilWriteMask() {

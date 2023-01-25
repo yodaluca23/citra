@@ -2,6 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <boost/container/static_vector.hpp>
 #include "common/common_paths.h"
 #include "common/file_util.h"
 #include "common/logging/log.h"
@@ -59,6 +60,37 @@ vk::ShaderStageFlagBits MakeShaderStage(std::size_t index) {
     return vk::ShaderStageFlagBits::eVertex;
 }
 
+u64 PipelineInfo::Hash(const Instance& instance) const {
+    u64 info_hash = 0;
+    const auto AppendHash = [&info_hash](const auto& data) {
+        const u64 data_hash = Common::ComputeStructHash64(data);
+        info_hash = Common::HashCombine(info_hash, data_hash);
+    };
+
+    AppendHash(vertex_layout);
+    AppendHash(attachments);
+
+    if (!instance.IsExtendedDynamicStateSupported()) {
+        AppendHash(rasterization);
+        AppendHash(depth_stencil);
+    }
+    if (!instance.IsExtendedDynamicState2Supported()) {
+        AppendHash(blending.logic_op);
+    }
+    if (!instance.IsExtendedDynamicState3LogicOpSupported() ||
+        !instance.IsExtendedDynamicState3BlendEnableSupported()) {
+        AppendHash(blending.blend_enable);
+    }
+    if (!instance.IsExtendedDynamicState3BlendEqSupported()) {
+        AppendHash(blending.value);
+    }
+    if (!instance.IsExtendedDynamicState3ColorMaskSupported()) {
+        AppendHash(blending.color_write_mask);
+    }
+
+    return info_hash;
+}
+
 PipelineCache::Shader::Shader(const Instance& instance) : device{instance.GetDevice()} {}
 
 PipelineCache::Shader::Shader(const Instance& instance, vk::ShaderStageFlagBits stage,
@@ -80,8 +112,8 @@ PipelineCache::GraphicsPipeline::GraphicsPipeline(
     Common::ThreadWorker* worker_)
     : instance{instance_}, worker{worker_}, pipeline_layout{layout_},
       pipeline_cache{pipeline_cache_}, info{info_}, stages{stages_},
-      renderpass{
-          renderpass_cache_.GetRenderpass(info.color_attachment, info.depth_attachment, false)} {
+      renderpass{renderpass_cache_.GetRenderpass(info.attachments.color_format,
+                                                 info.attachments.depth_format, false)} {
 
     // Ask the driver if it can give us the pipeline quickly
     if (Build(true)) {
@@ -170,7 +202,7 @@ bool PipelineCache::GraphicsPipeline::Build(bool fail_on_compile_required) {
     };
 
     const vk::PipelineColorBlendAttachmentState colorblend_attachment = {
-        .blendEnable = info.blending.blend_enable.Value(),
+        .blendEnable = info.blending.blend_enable,
         .srcColorBlendFactor = PicaToVK::BlendFunc(info.blending.src_color_blend_factor),
         .dstColorBlendFactor = PicaToVK::BlendFunc(info.blending.dst_color_blend_factor),
         .colorBlendOp = PicaToVK::BlendEquation(info.blending.color_blend_eq),
@@ -181,8 +213,8 @@ bool PipelineCache::GraphicsPipeline::Build(bool fail_on_compile_required) {
     };
 
     const vk::PipelineColorBlendStateCreateInfo color_blending = {
-        .logicOpEnable = !info.blending.blend_enable.Value() && !instance.NeedsLogicOpEmulation(),
-        .logicOp = PicaToVK::LogicOp(info.blending.logic_op.Value()),
+        .logicOpEnable = !info.blending.blend_enable && !instance.NeedsLogicOpEmulation(),
+        .logicOp = PicaToVK::LogicOp(info.blending.logic_op),
         .attachmentCount = 1,
         .pAttachments = &colorblend_attachment,
         .blendConstants = std::array{1.0f, 1.0f, 1.0f, 1.0f},
@@ -209,27 +241,39 @@ bool PipelineCache::GraphicsPipeline::Build(bool fail_on_compile_required) {
         .pScissors = &scissor,
     };
 
-    const bool extended_dynamic_states = instance.IsExtendedDynamicStateSupported();
-    const std::array dynamic_states = {
-        vk::DynamicState::eViewport,
-        vk::DynamicState::eScissor,
-        vk::DynamicState::eStencilCompareMask,
-        vk::DynamicState::eStencilWriteMask,
-        vk::DynamicState::eStencilReference,
-        vk::DynamicState::eBlendConstants,
-        // VK_EXT_extended_dynamic_state
-        vk::DynamicState::eCullModeEXT,
-        vk::DynamicState::eDepthCompareOpEXT,
-        vk::DynamicState::eDepthTestEnableEXT,
-        vk::DynamicState::eDepthWriteEnableEXT,
-        vk::DynamicState::eFrontFaceEXT,
-        vk::DynamicState::ePrimitiveTopologyEXT,
-        vk::DynamicState::eStencilOpEXT,
-        vk::DynamicState::eStencilTestEnableEXT,
+    boost::container::static_vector<vk::DynamicState, 20> dynamic_states = {
+        vk::DynamicState::eViewport,           vk::DynamicState::eScissor,
+        vk::DynamicState::eStencilCompareMask, vk::DynamicState::eStencilWriteMask,
+        vk::DynamicState::eStencilReference,   vk::DynamicState::eBlendConstants,
     };
 
+    if (instance.IsExtendedDynamicStateSupported()) {
+        constexpr std::array extended = {
+            vk::DynamicState::eCullModeEXT,        vk::DynamicState::eDepthCompareOpEXT,
+            vk::DynamicState::eDepthTestEnableEXT, vk::DynamicState::eDepthWriteEnableEXT,
+            vk::DynamicState::eFrontFaceEXT,       vk::DynamicState::ePrimitiveTopologyEXT,
+            vk::DynamicState::eStencilOpEXT,       vk::DynamicState::eStencilTestEnableEXT,
+        };
+        dynamic_states.insert(dynamic_states.end(), extended.begin(), extended.end());
+    }
+    if (instance.IsExtendedDynamicState2Supported()) {
+        dynamic_states.push_back(vk::DynamicState::eLogicOpEXT);
+    }
+    if (instance.IsExtendedDynamicState3LogicOpSupported()) {
+        dynamic_states.push_back(vk::DynamicState::eLogicOpEnableEXT);
+    }
+    if (instance.IsExtendedDynamicState3BlendEnableSupported()) {
+        dynamic_states.push_back(vk::DynamicState::eColorBlendEnableEXT);
+    }
+    if (instance.IsExtendedDynamicState3BlendEqSupported()) {
+        dynamic_states.push_back(vk::DynamicState::eColorBlendEquationEXT);
+    }
+    if (instance.IsExtendedDynamicState3ColorMaskSupported()) {
+        dynamic_states.push_back(vk::DynamicState::eColorWriteMaskEXT);
+    }
+
     const vk::PipelineDynamicStateCreateInfo dynamic_info = {
-        .dynamicStateCount = extended_dynamic_states ? static_cast<u32>(dynamic_states.size()) : 6u,
+        .dynamicStateCount = static_cast<u32>(dynamic_states.size()),
         .pDynamicStates = dynamic_states.data(),
     };
 
@@ -393,17 +437,14 @@ void PipelineCache::SaveDiskCache() {
 MICROPROFILE_DEFINE(Vulkan_Bind, "Vulkan", "Pipeline Bind", MP_RGB(192, 32, 32));
 bool PipelineCache::BindPipeline(const PipelineInfo& info, bool wait_built) {
     MICROPROFILE_SCOPE(Vulkan_Bind);
-    std::size_t shader_hash = 0;
+
+    u64 shader_hash = 0;
     for (u32 i = 0; i < MAX_SHADER_STAGES; i++) {
         shader_hash = Common::HashCombine(shader_hash, shader_hashes[i]);
     }
 
-    const u64 info_hash_size = instance.IsExtendedDynamicStateSupported()
-                                   ? offsetof(PipelineInfo, rasterization)
-                                   : offsetof(PipelineInfo, dynamic);
-
-    u64 info_hash = Common::ComputeHash64(&info, info_hash_size);
-    u64 pipeline_hash = Common::HashCombine(shader_hash, info_hash);
+    const u64 info_hash = info.Hash(instance);
+    const u64 pipeline_hash = Common::HashCombine(shader_hash, info_hash);
 
     auto [it, new_pipeline] = graphics_pipelines.try_emplace(pipeline_hash);
     if (new_pipeline) {
@@ -611,12 +652,6 @@ void PipelineCache::SetScissor(s32 x, s32 y, u32 width, u32 height) {
 }
 
 void PipelineCache::ApplyDynamic(const PipelineInfo& info, bool is_dirty) {
-    if (!is_dirty && info.dynamic == current_info.dynamic &&
-        info.rasterization.value == current_info.rasterization.value &&
-        info.depth_stencil.value == current_info.depth_stencil.value) {
-        return;
-    }
-
     scheduler.Record([is_dirty, current_dynamic = current_info.dynamic,
                       dynamic = info.dynamic](vk::CommandBuffer cmdbuf) {
         if (dynamic.stencil_compare_mask != current_dynamic.stencil_compare_mask || is_dirty) {
@@ -685,6 +720,61 @@ void PipelineCache::ApplyDynamic(const PipelineInfo& info, bool is_dirty) {
                                        PicaToVK::StencilOp(depth_stencil.stencil_pass_op),
                                        PicaToVK::StencilOp(depth_stencil.stencil_depth_fail_op),
                                        PicaToVK::CompareFunc(depth_stencil.stencil_compare_op));
+            }
+        });
+    }
+
+    if (instance.IsExtendedDynamicState2Supported()) {
+        scheduler.Record(
+            [is_dirty, logic_op = info.blending.logic_op,
+             current_logic_op = current_info.blending.logic_op](vk::CommandBuffer cmdbuf) {
+                if (logic_op != current_logic_op || is_dirty) {
+                    cmdbuf.setLogicOpEXT(PicaToVK::LogicOp(logic_op));
+                }
+            });
+    }
+
+    if (instance.IsExtendedDynamicState3LogicOpSupported() && !instance.NeedsLogicOpEmulation()) {
+        scheduler.Record(
+            [is_dirty, blend_enable = info.blending.blend_enable,
+             current_blend_enable = current_info.blending.blend_enable](vk::CommandBuffer cmdbuf) {
+                if (blend_enable != current_blend_enable || is_dirty) {
+                    cmdbuf.setLogicOpEnableEXT(!blend_enable);
+                }
+            });
+    }
+    if (instance.IsExtendedDynamicState3BlendEnableSupported()) {
+        scheduler.Record(
+            [is_dirty, blend_enable = info.blending.blend_enable,
+             current_blend_enable = current_info.blending.blend_enable](vk::CommandBuffer cmdbuf) {
+                if (blend_enable != current_blend_enable || is_dirty) {
+                    cmdbuf.setColorBlendEnableEXT(0, blend_enable);
+                }
+            });
+    }
+    if (instance.IsExtendedDynamicState3BlendEqSupported()) {
+        scheduler.Record([is_dirty, blending = info.blending,
+                          current_blending = current_info.blending](vk::CommandBuffer cmdbuf) {
+            if (blending.value != current_blending.value || is_dirty) {
+                const vk::ColorBlendEquationEXT blend_info = {
+                    .srcColorBlendFactor = PicaToVK::BlendFunc(blending.src_color_blend_factor),
+                    .dstColorBlendFactor = PicaToVK::BlendFunc(blending.dst_color_blend_factor),
+                    .colorBlendOp = PicaToVK::BlendEquation(blending.color_blend_eq),
+                    .srcAlphaBlendFactor = PicaToVK::BlendFunc(blending.src_alpha_blend_factor),
+                    .dstAlphaBlendFactor = PicaToVK::BlendFunc(blending.dst_alpha_blend_factor),
+                    .alphaBlendOp = PicaToVK::BlendEquation(blending.alpha_blend_eq),
+                };
+
+                cmdbuf.setColorBlendEquationEXT(0, blend_info);
+            }
+        });
+    }
+    if (instance.IsExtendedDynamicState3ColorMaskSupported()) {
+        scheduler.Record([is_dirty, color_mask = info.blending.color_write_mask,
+                          current_color_mask =
+                              current_info.blending.color_write_mask](vk::CommandBuffer cmdbuf) {
+            if (color_mask != current_color_mask || is_dirty) {
+                cmdbuf.setColorWriteMaskEXT(0, static_cast<vk::ColorComponentFlags>(color_mask));
             }
         });
     }
