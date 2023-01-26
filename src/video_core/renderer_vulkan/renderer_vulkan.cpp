@@ -906,7 +906,6 @@ void RendererVulkan::SwapBuffers() {
 
     do {
         if (swapchain.NeedsRecreation()) {
-            scheduler.Finish();
             swapchain.Create();
         }
         scheduler.WaitWorker();

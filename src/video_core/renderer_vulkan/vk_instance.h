@@ -233,6 +233,11 @@ public:
         return limits.maxTexelBufferElements;
     }
 
+    /// Returns true if shaders can declare the ClipDistance attribute
+    bool IsShaderClipDistanceSupported() const {
+        return features.shaderClipDistance;
+    }
+
     /// Returns true if triangle fan is an accepted primitive topology
     bool IsTriangleFanSupported() const {
         return triangle_fan_supported;

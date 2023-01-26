@@ -1602,6 +1602,7 @@ void main() {
 std::optional<std::string> GenerateVertexShader(const Pica::Shader::ShaderSetup& setup,
                                                 const PicaVSConfig& config) {
     std::string out = "#extension GL_ARB_separate_shader_objects : enable\n";
+    out += UniformBlockDef;
     out += OpenGL::ShaderDecompiler::GetCommonDeclarations();
 
     std::array<bool, 16> used_regs{};
@@ -1692,8 +1693,14 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
                semantic(VSOutputAttributes::POSITION_W) + ");\n";
         out += "    gl_Position = vtx_pos;\n";
         out += "    gl_Position.z = (gl_Position.z + gl_Position.w) / 2.0;\n";
-        out += "    normquat = GetVertexQuaternion();\n";
+        out += "    gl_ClipDistance[0] = -vtx_pos.z;\n"; // fixed PICA clipping plane z <= 0
+        out += "    if (enable_clip1) {\n";
+        out += "        gl_ClipDistance[1] = dot(clip_coef, vtx_pos);\n";
+        out += "    } else {\n";
+        out += "        gl_ClipDistance[1] = 0;\n";
+        out += "    }\n\n";
 
+        out += "    normquat = GetVertexQuaternion();\n";
         out += "    vec4 vtx_color = vec4(" + semantic(VSOutputAttributes::COLOR_R) + ", " +
                semantic(VSOutputAttributes::COLOR_G) + ", " +
                semantic(VSOutputAttributes::COLOR_B) + ", " +
@@ -1766,10 +1773,12 @@ struct Vertex {
            semantic(VSOutputAttributes::POSITION_W) + ");\n";
     out += "    gl_Position = vtx_pos;\n";
     out += "    gl_Position.z = (gl_Position.z + gl_Position.w) / 2.0;\n";
-    out += "#if !defined(CITRA_GLES) || defined(GL_EXT_clip_cull_distance)\n";
     out += "    gl_ClipDistance[0] = -vtx_pos.z;\n"; // fixed PICA clipping plane z <= 0
-    out += "    gl_ClipDistance[1] = dot(clip_coef, vtx_pos);\n";
-    out += "#endif // !defined(CITRA_GLES) || defined(GL_EXT_clip_cull_distance)\n\n";
+    out += "    if (enable_clip1) {\n";
+    out += "        gl_ClipDistance[1] = dot(clip_coef, vtx_pos);\n";
+    out += "    } else {\n";
+    out += "        gl_ClipDistance[1] = 0;\n";
+    out += "    }\n\n";
 
     out += "    vec4 vtx_quat = GetVertexQuaternion(vtx);\n";
     out += "    normquat = mix(vtx_quat, -vtx_quat, bvec4(quats_opposite));\n\n";
