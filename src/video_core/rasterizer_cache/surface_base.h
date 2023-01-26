@@ -152,7 +152,7 @@ SurfaceInterval SurfaceBase<S>::GetCopyableInterval(const SurfaceParams& params)
             params.addr +
                 Common::AlignDown(boost::icl::last_next(valid_interval) - params.addr, tile_align)};
 
-        if (params.BytesInPixels(tile_align) > boost::icl::length(valid_interval) ||
+        if (tile_align > boost::icl::length(valid_interval) ||
             boost::icl::length(aligned_interval) == 0) {
             continue;
         }
