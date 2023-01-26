@@ -328,11 +328,7 @@ bool PipelineCache::GraphicsPipeline::Build(bool fail_on_compile_required) {
         .pPipelineStageCreationFeedbacks = creation_stage_feedback.data(),
     };
 
-    const vk::GraphicsPipelineCreateInfo pipeline_info = {
-        .pNext = fail_on_compile_required ? &creation_feedback_info : nullptr,
-        .flags = fail_on_compile_required
-                     ? vk::PipelineCreateFlagBits::eFailOnPipelineCompileRequiredEXT
-                     : vk::PipelineCreateFlags{},
+    vk::GraphicsPipelineCreateInfo pipeline_info = {
         .stageCount = shader_count,
         .pStages = shader_stages.data(),
         .pVertexInputState = &vertex_input_info,
@@ -346,6 +342,13 @@ bool PipelineCache::GraphicsPipeline::Build(bool fail_on_compile_required) {
         .layout = pipeline_layout,
         .renderPass = renderpass,
     };
+
+    if (fail_on_compile_required) {
+        pipeline_info.flags |= vk::PipelineCreateFlagBits::eFailOnPipelineCompileRequiredEXT;
+    }
+    if (instance.IsPipelineCreationFeedbackSupported()) {
+        pipeline_info.pNext = &creation_feedback_info;
+    }
 
     const vk::ResultValue result = device.createGraphicsPipeline(pipeline_cache, pipeline_info);
     if (result.result == vk::Result::eSuccess) {

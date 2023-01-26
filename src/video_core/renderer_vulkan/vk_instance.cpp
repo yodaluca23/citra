@@ -3,7 +3,6 @@
 // Refer to the license.txt file included.
 
 #include <span>
-#include <boost/container/small_vector.hpp>
 #include "common/assert.h"
 #include "common/settings.h"
 #include "core/frontend/emu_window.h"
@@ -567,6 +566,7 @@ bool Instance::CreateDevice() {
     AddExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     timeline_semaphores = AddExtension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
     image_format_list = AddExtension(VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME);
+    pipeline_creation_feedback = AddExtension(VK_EXT_PIPELINE_CREATION_FEEDBACK_EXTENSION_NAME);
     bool has_portability_subset = AddExtension(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
     bool has_extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     bool has_extended_dynamic_state2 = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
