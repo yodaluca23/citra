@@ -102,7 +102,7 @@ constexpr u64 DOWNLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
 TextureRuntime::TextureRuntime(const Instance& instance, Scheduler& scheduler,
                                RenderpassCache& renderpass_cache, DescriptorManager& desc_manager)
     : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache},
-      desc_manager{desc_manager}, blit_helper{instance, scheduler, desc_manager, renderpass_cache},
+      blit_helper{instance, scheduler, desc_manager, renderpass_cache},
       upload_buffer{instance, scheduler, vk::BufferUsageFlagBits::eTransferSrc, UPLOAD_BUFFER_SIZE},
       download_buffer{instance, scheduler, vk::BufferUsageFlagBits::eTransferDst,
                       DOWNLOAD_BUFFER_SIZE, true} {
@@ -135,10 +135,6 @@ TextureRuntime::~TextureRuntime() {
         if (alloc.storage_view) {
             device.destroyImageView(alloc.storage_view);
         }
-    }
-
-    for (const auto& [key, framebuffer] : clear_framebuffers) {
-        device.destroyFramebuffer(framebuffer);
     }
 
     texture_recycler.clear();
@@ -449,41 +445,6 @@ void TextureRuntime::ClearTextureWithRenderpass(Surface& surface,
         is_color ? vk::PipelineStageFlagBits::eColorAttachmentOutput
                  : vk::PipelineStageFlagBits::eEarlyFragmentTests;
 
-    const vk::RenderPass clear_renderpass =
-        is_color ? renderpass_cache.GetRenderpass(surface.pixel_format,
-                                                  VideoCore::PixelFormat::Invalid, true)
-                 : renderpass_cache.GetRenderpass(VideoCore::PixelFormat::Invalid,
-                                                  surface.pixel_format, true);
-
-    const vk::ImageView framebuffer_view = surface.GetFramebufferView();
-
-    auto [it, new_framebuffer] =
-        clear_framebuffers.try_emplace(framebuffer_view, vk::Framebuffer{});
-    if (new_framebuffer) {
-        const vk::FramebufferCreateInfo framebuffer_info = {
-            .renderPass = clear_renderpass,
-            .attachmentCount = 1,
-            .pAttachments = &framebuffer_view,
-            .width = surface.GetScaledWidth(),
-            .height = surface.GetScaledHeight(),
-            .layers = 1,
-        };
-
-        it->second = instance.GetDevice().createFramebuffer(framebuffer_info);
-    }
-
-    const RenderpassState clear_info = {
-        .renderpass = clear_renderpass,
-        .framebuffer = it->second,
-        .render_area =
-            vk::Rect2D{
-                .offset = {static_cast<s32>(clear.texture_rect.left),
-                           static_cast<s32>(clear.texture_rect.bottom)},
-                .extent = {clear.texture_rect.GetWidth(), clear.texture_rect.GetHeight()},
-            },
-        .clear = MakeClearValue(value),
-    };
-
     const RecordParams params = {
         .aspect = surface.alloc.aspect,
         .pipeline_flags = surface.PipelineStageFlags(),
@@ -513,7 +474,27 @@ void TextureRuntime::ClearTextureWithRenderpass(Surface& surface,
                                vk::DependencyFlagBits::eByRegion, {}, {}, pre_barrier);
     });
 
-    renderpass_cache.EnterRenderpass(clear_info);
+    Surface* color_surface{};
+    Surface* depth_surface{};
+    if (is_color) {
+        color_surface = &surface;
+    } else {
+        depth_surface = &surface;
+    }
+
+    const vk::Rect2D render_area = {
+        .offset{
+            .x = static_cast<s32>(clear.texture_rect.left),
+            .y = static_cast<s32>(clear.texture_rect.bottom),
+        },
+        .extent{
+            .width = clear.texture_rect.GetWidth(),
+            .height = clear.texture_rect.GetHeight(),
+        },
+    };
+
+    renderpass_cache.EnterRenderpass(color_surface, depth_surface, render_area, true,
+                                     MakeClearValue(value));
     renderpass_cache.ExitRenderpass();
 
     scheduler.Record([params, access_flag, pipeline_flags](vk::CommandBuffer cmdbuf) {

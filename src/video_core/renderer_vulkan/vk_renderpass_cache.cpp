@@ -2,10 +2,12 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <limits>
 #include "common/assert.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
+#include "video_core/renderer_vulkan/vk_texture_runtime.h"
 
 namespace Vulkan {
 
@@ -26,12 +28,61 @@ RenderpassCache::~RenderpassCache() {
         }
     }
 
+    for (auto& [key, framebuffer] : framebuffers) {
+        device.destroyFramebuffer(framebuffer);
+    }
+
     device.destroyRenderPass(present_renderpass);
 }
 
-void RenderpassCache::EnterRenderpass(const RenderpassState& state) {
+void RenderpassCache::EnterRenderpass(Surface* const color, Surface* const depth_stencil,
+                                      vk::Rect2D render_area, bool do_clear, vk::ClearValue clear) {
+    ASSERT(color || depth_stencil);
+
+    u32 width = UINT32_MAX;
+    u32 height = UINT32_MAX;
+    u32 cursor = 0;
+    std::array<VideoCore::PixelFormat, 2> formats{};
+    std::array<vk::ImageView, 2> views{};
+
+    const auto Prepare = [&](Surface* const surface) {
+        if (!surface) {
+            formats[cursor++] = VideoCore::PixelFormat::Invalid;
+            return;
+        }
+
+        width = std::min(width, surface->GetScaledWidth());
+        height = std::min(height, surface->GetScaledHeight());
+        formats[cursor] = surface->pixel_format;
+        views[cursor++] = surface->GetFramebufferView();
+    };
+
+    Prepare(color);
+    Prepare(depth_stencil);
+
+    const vk::RenderPass renderpass = GetRenderpass(formats[0], formats[1], do_clear);
+
+    const FramebufferInfo framebuffer_info = {
+        .color = views[0],
+        .depth = views[1],
+        .width = width,
+        .height = height,
+    };
+
+    auto [it, new_framebuffer] = framebuffers.try_emplace(framebuffer_info);
+    if (new_framebuffer) {
+        it->second = CreateFramebuffer(framebuffer_info, renderpass);
+    }
+
+    const RenderpassState new_state = {
+        .renderpass = renderpass,
+        .framebuffer = it->second,
+        .render_area = render_area,
+        .clear = clear,
+    };
+
     const bool is_dirty = scheduler.IsStateDirty(StateFlags::Renderpass);
-    if (current_state == state && !is_dirty) {
+    if (current_state == new_state && !is_dirty) {
         cmd_count++;
         return;
     }
@@ -40,23 +91,20 @@ void RenderpassCache::EnterRenderpass(const RenderpassState& state) {
         ExitRenderpass();
     }
 
-    scheduler.Record([state](vk::CommandBuffer cmdbuf) {
+    scheduler.Record([new_state](vk::CommandBuffer cmdbuf) {
         const vk::RenderPassBeginInfo renderpass_begin_info = {
-            .renderPass = state.renderpass,
-            .framebuffer = state.framebuffer,
-            .renderArea = state.render_area,
+            .renderPass = new_state.renderpass,
+            .framebuffer = new_state.framebuffer,
+            .renderArea = new_state.render_area,
             .clearValueCount = 1,
-            .pClearValues = &state.clear,
+            .pClearValues = &new_state.clear,
         };
 
         cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
     });
 
-    if (is_dirty) {
-        scheduler.MarkStateNonDirty(StateFlags::Renderpass);
-    }
-
-    current_state = state;
+    scheduler.MarkStateNonDirty(StateFlags::Renderpass);
+    current_state = new_state;
 }
 
 void RenderpassCache::ExitRenderpass() {
@@ -178,8 +226,32 @@ vk::RenderPass RenderpassCache::CreateRenderPass(vk::Format color, vk::Format de
         .pDependencies = nullptr,
     };
 
-    const vk::Device device = instance.GetDevice();
-    return device.createRenderPass(renderpass_info);
+    return instance.GetDevice().createRenderPass(renderpass_info);
+}
+
+vk::Framebuffer RenderpassCache::CreateFramebuffer(const FramebufferInfo& info,
+                                                   vk::RenderPass renderpass) {
+    u32 attachment_count = 0;
+    std::array<vk::ImageView, 2> attachments;
+
+    if (info.color) {
+        attachments[attachment_count++] = info.color;
+    }
+
+    if (info.depth) {
+        attachments[attachment_count++] = info.depth;
+    }
+
+    const vk::FramebufferCreateInfo framebuffer_info = {
+        .renderPass = renderpass,
+        .attachmentCount = attachment_count,
+        .pAttachments = attachments.data(),
+        .width = info.width,
+        .height = info.height,
+        .layers = 1,
+    };
+
+    return instance.GetDevice().createFramebuffer(framebuffer_info);
 }
 
 } // namespace Vulkan

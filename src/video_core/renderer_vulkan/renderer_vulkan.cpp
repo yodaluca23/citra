@@ -216,13 +216,25 @@ void RendererVulkan::BeginRendering() {
                                   {});
     });
 
-    const RenderpassState renderpass_info = {
-        .renderpass = renderpass_cache.GetPresentRenderpass(),
-        .framebuffer = swapchain.GetFramebuffer(),
-        .render_area = vk::Rect2D{.offset = {0, 0}, .extent = swapchain.GetExtent()},
-        .clear = vk::ClearValue{.color = clear_color}};
+    renderpass_cache.ExitRenderpass();
 
-    renderpass_cache.EnterRenderpass(renderpass_info);
+    scheduler.Record([this, framebuffer = swapchain.GetFramebuffer(),
+                      extent = swapchain.GetExtent()](vk::CommandBuffer cmdbuf) {
+        const vk::ClearValue clear{.color = clear_color};
+        const vk::RenderPassBeginInfo renderpass_begin_info = {
+            .renderPass = renderpass_cache.GetPresentRenderpass(),
+            .framebuffer = framebuffer,
+            .renderArea =
+                vk::Rect2D{
+                    .offset = {0, 0},
+                    .extent = extent,
+                },
+            .clearValueCount = 1,
+            .pClearValues = &clear,
+        };
+
+        cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
+    });
 }
 
 void RendererVulkan::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& framebuffer,
@@ -896,7 +908,7 @@ void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool f
         }
     }
 
-    renderpass_cache.ExitRenderpass();
+    scheduler.Record([](vk::CommandBuffer cmdbuf) { cmdbuf.endRenderPass(); });
 }
 
 void RendererVulkan::SwapBuffers() {

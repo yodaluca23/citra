@@ -41,16 +41,6 @@ struct SamplerInfo {
     auto operator<=>(const SamplerInfo&) const noexcept = default;
 };
 
-struct FramebufferInfo {
-    vk::ImageView color;
-    vk::ImageView depth;
-    vk::RenderPass renderpass;
-    u32 width = 1;
-    u32 height = 1;
-
-    auto operator<=>(const FramebufferInfo&) const noexcept = default;
-};
-
 } // namespace Vulkan
 
 namespace std {
@@ -58,13 +48,6 @@ template <>
 struct hash<Vulkan::SamplerInfo> {
     std::size_t operator()(const Vulkan::SamplerInfo& info) const noexcept {
         return Common::ComputeHash64(&info, sizeof(Vulkan::SamplerInfo));
-    }
-};
-
-template <>
-struct hash<Vulkan::FramebufferInfo> {
-    std::size_t operator()(const Vulkan::FramebufferInfo& info) const noexcept {
-        return Common::ComputeHash64(&info, sizeof(Vulkan::FramebufferInfo));
     }
 };
 } // namespace std
@@ -167,9 +150,6 @@ private:
     /// Creates a new sampler object
     vk::Sampler CreateSampler(const SamplerInfo& info);
 
-    /// Creates a new Vulkan framebuffer object
-    vk::Framebuffer CreateFramebuffer(const FramebufferInfo& info);
-
 private:
     const Instance& instance;
     Scheduler& scheduler;
@@ -190,7 +170,6 @@ private:
     std::array<SamplerInfo, 3> texture_samplers;
     SamplerInfo texture_cube_sampler;
     std::unordered_map<SamplerInfo, vk::Sampler> samplers;
-    std::unordered_map<FramebufferInfo, vk::Framebuffer> framebuffers;
     PipelineInfo pipeline_info;
 
     StreamBuffer stream_buffer;     ///< Vertex+Index+Uniform buffer

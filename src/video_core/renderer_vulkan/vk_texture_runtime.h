@@ -44,6 +44,7 @@ struct ImageAlloc {
     vk::ImageUsageFlags usage;
     vk::Format format;
     vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eColor;
+    vk::ImageLayout layout;
 };
 
 struct HostTextureTag {
@@ -152,13 +153,11 @@ private:
     const Instance& instance;
     Scheduler& scheduler;
     RenderpassCache& renderpass_cache;
-    DescriptorManager& desc_manager;
     BlitHelper blit_helper;
     StreamBuffer upload_buffer;
     StreamBuffer download_buffer;
     std::array<ReinterpreterList, VideoCore::PIXEL_FORMAT_COUNT> reinterpreters;
     std::unordered_multimap<HostTextureTag, ImageAlloc> texture_recycler;
-    std::unordered_map<vk::ImageView, vk::Framebuffer> clear_framebuffers;
 };
 
 class Surface : public VideoCore::SurfaceBase<Surface> {

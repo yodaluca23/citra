@@ -144,10 +144,6 @@ RasterizerVulkan::~RasterizerVulkan() {
         device.destroySampler(sampler);
     }
 
-    for (auto& [key, framebuffer] : framebuffers) {
-        device.destroyFramebuffer(framebuffer);
-    }
-
     device.destroySampler(default_sampler);
     device.destroyBufferView(texture_lf_view);
     device.destroyBufferView(texture_rg_view);
@@ -674,48 +670,18 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
     // NOTE: From here onwards its a safe zone to set the draw state, doing that any earlier will
     // cause issues as the rasterizer cache might cause a scheduler switch and invalidate our state
-
-    // Sometimes the dimentions of the color and depth framebuffers might not be the same
-    // In that case select the minimum one to abide by the spec
-    u32 width = 0;
-    u32 height = 0;
-    if (color_surface && depth_surface) {
-        width = std::min(color_surface->GetScaledWidth(), depth_surface->GetScaledWidth());
-        height = std::min(color_surface->GetScaledHeight(), depth_surface->GetScaledHeight());
-    } else if (color_surface) {
-        width = color_surface->GetScaledWidth();
-        height = color_surface->GetScaledHeight();
-    } else if (depth_surface) {
-        width = depth_surface->GetScaledWidth();
-        height = depth_surface->GetScaledHeight();
-    }
-
-    const FramebufferInfo framebuffer_info = {
-        .color = color_surface ? color_surface->GetFramebufferView() : VK_NULL_HANDLE,
-        .depth = depth_surface ? depth_surface->GetFramebufferView() : VK_NULL_HANDLE,
-        .renderpass = renderpass_cache.GetRenderpass(pipeline_info.attachments.color_format,
-                                                     pipeline_info.attachments.depth_format, false),
-        .width = width,
-        .height = height,
+    const vk::Rect2D render_area = {
+        .offset{
+            .x = static_cast<s32>(draw_rect.left),
+            .y = static_cast<s32>(draw_rect.bottom),
+        },
+        .extent{
+            .width = draw_rect.GetWidth(),
+            .height = draw_rect.GetHeight(),
+        },
     };
 
-    auto [it, new_framebuffer] = framebuffers.try_emplace(framebuffer_info, vk::Framebuffer{});
-    if (new_framebuffer) {
-        it->second = CreateFramebuffer(framebuffer_info);
-    }
-
-    const RenderpassState renderpass_info = {
-        .renderpass = framebuffer_info.renderpass,
-        .framebuffer = it->second,
-        .render_area =
-            vk::Rect2D{
-                .offset = {static_cast<s32>(draw_rect.left), static_cast<s32>(draw_rect.bottom)},
-                .extent = {draw_rect.GetWidth(), draw_rect.GetHeight()},
-            },
-        .clear = {},
-    };
-
-    renderpass_cache.EnterRenderpass(renderpass_info);
+    renderpass_cache.EnterRenderpass(color_surface.get(), depth_surface.get(), render_area);
 
     // Sync and bind the shader
     if (shader_dirty) {
@@ -1108,31 +1074,6 @@ vk::Sampler RasterizerVulkan::CreateSampler(const SamplerInfo& info) {
 
     vk::Device device = instance.GetDevice();
     return device.createSampler(sampler_info);
-}
-
-vk::Framebuffer RasterizerVulkan::CreateFramebuffer(const FramebufferInfo& info) {
-    u32 attachment_count = 0;
-    std::array<vk::ImageView, 2> attachments;
-
-    if (info.color) {
-        attachments[attachment_count++] = info.color;
-    }
-
-    if (info.depth) {
-        attachments[attachment_count++] = info.depth;
-    }
-
-    const vk::FramebufferCreateInfo framebuffer_info = {
-        .renderPass = info.renderpass,
-        .attachmentCount = attachment_count,
-        .pAttachments = attachments.data(),
-        .width = info.width,
-        .height = info.height,
-        .layers = 1,
-    };
-
-    vk::Device device = instance.GetDevice();
-    return device.createFramebuffer(framebuffer_info);
 }
 
 void RasterizerVulkan::SyncClipEnabled() {

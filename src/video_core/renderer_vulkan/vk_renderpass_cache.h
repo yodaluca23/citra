@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstring>
+#include "common/hash.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
 #include "video_core/renderer_vulkan/vk_common.h"
 
@@ -12,17 +13,29 @@ namespace Vulkan {
 
 class Instance;
 class Scheduler;
+class Surface;
 
-struct RenderpassState {
-    vk::RenderPass renderpass;
-    vk::Framebuffer framebuffer;
-    vk::Rect2D render_area;
-    vk::ClearValue clear;
+struct FramebufferInfo {
+    vk::ImageView color;
+    vk::ImageView depth;
+    u32 width = 1;
+    u32 height = 1;
 
-    [[nodiscard]] bool operator==(const RenderpassState& other) const {
-        return std::memcmp(this, &other, sizeof(RenderpassState)) == 0;
+    auto operator<=>(const FramebufferInfo&) const noexcept = default;
+};
+
+} // namespace Vulkan
+
+namespace std {
+template <>
+struct hash<Vulkan::FramebufferInfo> {
+    std::size_t operator()(const Vulkan::FramebufferInfo& info) const noexcept {
+        return Common::ComputeStructHash64(info);
     }
 };
+} // namespace std
+
+namespace Vulkan {
 
 class RenderpassCache {
     static constexpr u32 MAX_COLOR_FORMATS = 5;
@@ -33,7 +46,8 @@ public:
     ~RenderpassCache();
 
     /// Begins a new renderpass only when no other renderpass is currently active
-    void EnterRenderpass(const RenderpassState& state);
+    void EnterRenderpass(Surface* const color, Surface* const depth_stencil, vk::Rect2D render_area,
+                         bool do_clear = false, vk::ClearValue clear = {});
 
     /// Exits from any currently active renderpass instance
     void ExitRenderpass();
@@ -56,12 +70,27 @@ private:
                                     vk::AttachmentLoadOp load_op, vk::ImageLayout initial_layout,
                                     vk::ImageLayout final_layout) const;
 
+    /// Creates a new Vulkan framebuffer object
+    vk::Framebuffer CreateFramebuffer(const FramebufferInfo& info, vk::RenderPass renderpass);
+
 private:
+    struct RenderpassState {
+        vk::RenderPass renderpass;
+        vk::Framebuffer framebuffer;
+        vk::Rect2D render_area;
+        vk::ClearValue clear;
+
+        [[nodiscard]] bool operator==(const RenderpassState& other) const {
+            return std::memcmp(this, &other, sizeof(RenderpassState)) == 0;
+        }
+    };
+
     const Instance& instance;
     Scheduler& scheduler;
     RenderpassState current_state{};
     vk::RenderPass present_renderpass{};
     vk::RenderPass cached_renderpasses[MAX_COLOR_FORMATS + 1][MAX_DEPTH_FORMATS + 1][2];
+    std::unordered_map<FramebufferInfo, vk::Framebuffer> framebuffers;
     u32 cmd_count{};
 };
 
