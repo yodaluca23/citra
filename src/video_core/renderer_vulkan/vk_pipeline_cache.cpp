@@ -110,10 +110,8 @@ PipelineCache::GraphicsPipeline::GraphicsPipeline(
     const Instance& instance_, RenderpassCache& renderpass_cache_, const PipelineInfo& info_,
     vk::PipelineCache pipeline_cache_, vk::PipelineLayout layout_, std::array<Shader*, 3> stages_,
     Common::ThreadWorker* worker_)
-    : instance{instance_}, worker{worker_}, pipeline_layout{layout_},
-      pipeline_cache{pipeline_cache_}, info{info_}, stages{stages_},
-      renderpass{renderpass_cache_.GetRenderpass(info.attachments.color_format,
-                                                 info.attachments.depth_format, false)} {
+    : instance{instance_}, renderpass_cache{renderpass_cache_}, worker{worker_},
+      pipeline_layout{layout_}, pipeline_cache{pipeline_cache_}, info{info_}, stages{stages_} {
 
     // Ask the driver if it can give us the pipeline quickly
     if (Build(true)) {
@@ -322,12 +320,6 @@ bool PipelineCache::GraphicsPipeline::Build(bool fail_on_compile_required) {
         .flags = vk::PipelineCreationFeedbackFlagBits::eValid,
     };
 
-    const vk::PipelineCreationFeedbackCreateInfoEXT creation_feedback_info = {
-        .pPipelineCreationFeedback = &creation_feedback,
-        .pipelineStageCreationFeedbackCount = shader_count,
-        .pPipelineStageCreationFeedbacks = creation_stage_feedback.data(),
-    };
-
     vk::GraphicsPipelineCreateInfo pipeline_info = {
         .stageCount = shader_count,
         .pStages = shader_stages.data(),
@@ -340,17 +332,48 @@ bool PipelineCache::GraphicsPipeline::Build(bool fail_on_compile_required) {
         .pColorBlendState = &color_blending,
         .pDynamicState = &dynamic_info,
         .layout = pipeline_layout,
-        .renderPass = renderpass,
     };
+
+    if (!instance.IsDynamicRenderingSupported()) {
+        pipeline_info.renderPass = renderpass_cache.GetRenderpass(
+            info.attachments.color_format, info.attachments.depth_format, false);
+    }
 
     if (fail_on_compile_required) {
         pipeline_info.flags |= vk::PipelineCreateFlagBits::eFailOnPipelineCompileRequiredEXT;
     }
-    if (instance.IsPipelineCreationFeedbackSupported()) {
-        pipeline_info.pNext = &creation_feedback_info;
+
+    const auto [color, depth] = info.attachments;
+    const auto& color_traits = instance.GetTraits(color);
+    const auto& depth_traits = instance.GetTraits(depth);
+    const u32 color_attachment_count = color != VideoCore::PixelFormat::Invalid ? 1u : 0u;
+
+    vk::StructureChain pipeline_chain = {
+        pipeline_info,
+        vk::PipelineCreationFeedbackCreateInfoEXT{
+            .pPipelineCreationFeedback = &creation_feedback,
+            .pipelineStageCreationFeedbackCount = shader_count,
+            .pPipelineStageCreationFeedbacks = creation_stage_feedback.data(),
+        },
+        vk::PipelineRenderingCreateInfoKHR{
+            .colorAttachmentCount = color_attachment_count,
+            .pColorAttachmentFormats = &color_traits.native,
+            .depthAttachmentFormat = depth_traits.native,
+            .stencilAttachmentFormat = depth_traits.aspect & vk::ImageAspectFlagBits::eStencil
+                                           ? depth_traits.native
+                                           : vk::Format::eUndefined,
+        },
+    };
+
+    if (!instance.IsPipelineCreationFeedbackSupported()) {
+        pipeline_chain.unlink<vk::PipelineCreationFeedbackCreateInfoEXT>();
+    }
+    if (!instance.IsDynamicRenderingSupported()) {
+        pipeline_chain.unlink<vk::PipelineRenderingCreateInfoKHR>();
     }
 
-    const vk::ResultValue result = device.createGraphicsPipeline(pipeline_cache, pipeline_info);
+    const vk::ResultValue result =
+        device.createGraphicsPipeline(pipeline_cache, pipeline_chain.get());
     if (result.result == vk::Result::eSuccess) {
         pipeline = result.value;
     } else if (result.result == vk::Result::eErrorPipelineCompileRequiredEXT) {

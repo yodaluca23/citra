@@ -529,7 +529,8 @@ bool Instance::CreateDevice() {
         vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT,
         vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR,
         vk::PhysicalDeviceCustomBorderColorFeaturesEXT, vk::PhysicalDeviceIndexTypeUint8FeaturesEXT,
-        vk::PhysicalDevicePipelineCreationCacheControlFeaturesEXT>();
+        vk::PhysicalDevicePipelineCreationCacheControlFeaturesEXT,
+        vk::PhysicalDeviceDynamicRenderingFeaturesKHR>();
     const vk::StructureChain properties_chain =
         physical_device.getProperties2<vk::PhysicalDeviceProperties2,
                                        vk::PhysicalDevicePortabilitySubsetPropertiesKHR>();
@@ -568,6 +569,7 @@ bool Instance::CreateDevice() {
     image_format_list = AddExtension(VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME);
     pipeline_creation_feedback = AddExtension(VK_EXT_PIPELINE_CREATION_FEEDBACK_EXTENSION_NAME);
     bool has_portability_subset = AddExtension(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+    bool has_dynamic_rendering = AddExtension(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     bool has_extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     bool has_extended_dynamic_state2 = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
     bool has_extended_dynamic_state3 = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
@@ -656,6 +658,7 @@ bool Instance::CreateDevice() {
         vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT{},
         vk::PhysicalDeviceExtendedDynamicState2FeaturesEXT{},
         vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT{},
+        vk::PhysicalDeviceDynamicRenderingFeaturesKHR{},
         vk::PhysicalDeviceCustomBorderColorFeaturesEXT{},
         vk::PhysicalDeviceIndexTypeUint8FeaturesEXT{},
         vk::PhysicalDevicePipelineCreationCacheControlFeaturesEXT{},
@@ -712,6 +715,13 @@ bool Instance::CreateDevice() {
                  extendedDynamicState3ColorWriteMask, extended_dynamic_state3_color_write_mask)
     } else {
         device_chain.unlink<vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT>();
+    }
+
+    if (has_dynamic_rendering) {
+        FEAT_SET(vk::PhysicalDeviceDynamicRenderingFeaturesKHR, dynamicRendering,
+                 dynamic_rendering);
+    } else {
+        device_chain.unlink<vk::PhysicalDeviceDynamicRenderingFeaturesKHR>();
     }
 
     if (has_custom_border_color) {

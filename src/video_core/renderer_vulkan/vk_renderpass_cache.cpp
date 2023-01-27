@@ -12,7 +12,8 @@
 namespace Vulkan {
 
 RenderpassCache::RenderpassCache(const Instance& instance, Scheduler& scheduler)
-    : instance{instance}, scheduler{scheduler} {}
+    : instance{instance}, scheduler{scheduler}, dynamic_rendering{
+                                                    instance.IsDynamicRenderingSupported()} {}
 
 RenderpassCache::~RenderpassCache() {
     vk::Device device = instance.GetDevice();
@@ -38,6 +39,10 @@ RenderpassCache::~RenderpassCache() {
 void RenderpassCache::EnterRenderpass(Surface* const color, Surface* const depth_stencil,
                                       vk::Rect2D render_area, bool do_clear, vk::ClearValue clear) {
     ASSERT(color || depth_stencil);
+
+    if (dynamic_rendering) {
+        return BeginRendering(color, depth_stencil, render_area, do_clear, clear);
+    }
 
     u32 width = UINT32_MAX;
     u32 height = UINT32_MAX;
@@ -81,13 +86,14 @@ void RenderpassCache::EnterRenderpass(Surface* const color, Surface* const depth
         .clear = clear,
     };
 
+    const u64 new_state_hash = Common::ComputeStructHash64(new_state);
     const bool is_dirty = scheduler.IsStateDirty(StateFlags::Renderpass);
-    if (current_state == new_state && !is_dirty) {
+    if (state_hash == new_state_hash && rendering && !is_dirty) {
         cmd_count++;
         return;
     }
 
-    if (current_state.renderpass) {
+    if (rendering) {
         ExitRenderpass();
     }
 
@@ -104,16 +110,23 @@ void RenderpassCache::EnterRenderpass(Surface* const color, Surface* const depth
     });
 
     scheduler.MarkStateNonDirty(StateFlags::Renderpass);
-    current_state = new_state;
+    state_hash = new_state_hash;
+    rendering = true;
 }
 
 void RenderpassCache::ExitRenderpass() {
-    if (!current_state.renderpass) {
+    if (!rendering) {
         return;
     }
 
-    scheduler.Record([](vk::CommandBuffer cmdbuf) { cmdbuf.endRenderPass(); });
-    current_state = {};
+    rendering = false;
+    scheduler.Record([dynamic_rendering = dynamic_rendering](vk::CommandBuffer cmdbuf) {
+        if (dynamic_rendering) {
+            cmdbuf.endRenderingKHR();
+        } else {
+            cmdbuf.endRenderPass();
+        }
+    });
 
     // The Mali guide recommends flushing at the end of each major renderpass
     // Testing has shown this has a significant effect on rendering performance
@@ -121,6 +134,78 @@ void RenderpassCache::ExitRenderpass() {
         scheduler.Flush();
         cmd_count = 0;
     }
+}
+
+void RenderpassCache::BeginRendering(Surface* const color, Surface* const depth_stencil,
+                                     vk::Rect2D render_area, bool do_clear, vk::ClearValue clear) {
+    RenderingState new_state = {
+        .render_area = render_area,
+        .clear = clear,
+        .do_clear = do_clear,
+    };
+
+    if (color) {
+        new_state.color_view = color->GetFramebufferView();
+    }
+    if (depth_stencil) {
+        new_state.depth_view = depth_stencil->GetFramebufferView();
+    }
+
+    const u64 new_state_hash = Common::ComputeStructHash64(new_state);
+    const bool is_dirty = scheduler.IsStateDirty(StateFlags::Renderpass);
+    if (state_hash == new_state_hash && rendering && !is_dirty) {
+        cmd_count++;
+        return;
+    }
+
+    if (rendering) {
+        ExitRenderpass();
+    }
+
+    const bool has_stencil =
+        depth_stencil && depth_stencil->type == VideoCore::SurfaceType::DepthStencil;
+    scheduler.Record([new_state, has_stencil](vk::CommandBuffer cmdbuf) {
+        u32 cursor = 0;
+        std::array<vk::RenderingAttachmentInfoKHR, 2> infos{};
+
+        const auto Prepare = [&](vk::ImageView image_view) {
+            if (!image_view) {
+                cursor++;
+                return;
+            }
+
+            infos[cursor++] = vk::RenderingAttachmentInfoKHR{
+                .imageView = image_view,
+                .imageLayout = vk::ImageLayout::eGeneral,
+                .loadOp =
+                    new_state.do_clear ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad,
+                .storeOp = vk::AttachmentStoreOp::eStore,
+                .clearValue = new_state.clear,
+            };
+        };
+
+        Prepare(new_state.color_view);
+        Prepare(new_state.depth_view);
+
+        const u32 color_attachment_count = new_state.color_view ? 1u : 0u;
+        const vk::RenderingAttachmentInfoKHR* depth_info =
+            new_state.depth_view ? &infos[1] : nullptr;
+        const vk::RenderingAttachmentInfoKHR* stencil_info = has_stencil ? &infos[1] : nullptr;
+        const vk::RenderingInfoKHR rendering_info = {
+            .renderArea = new_state.render_area,
+            .layerCount = 1,
+            .colorAttachmentCount = color_attachment_count,
+            .pColorAttachments = &infos[0],
+            .pDepthAttachment = depth_info,
+            .pStencilAttachment = stencil_info,
+        };
+
+        cmdbuf.beginRenderingKHR(rendering_info);
+    });
+
+    scheduler.MarkStateNonDirty(StateFlags::Renderpass);
+    state_hash = new_state_hash;
+    rendering = true;
 }
 
 void RenderpassCache::CreatePresentRenderpass(vk::Format format) {

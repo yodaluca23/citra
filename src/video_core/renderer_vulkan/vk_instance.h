@@ -148,6 +148,11 @@ public:
         return extended_dynamic_state3_color_write_mask;
     }
 
+    /// Returns true when VK_KHR_dynamic_rendering is supported
+    bool IsDynamicRenderingSupported() const {
+        return dynamic_rendering;
+    }
+
     /// Returns true when VK_KHR_push_descriptors is supported
     bool IsPushDescriptorsSupported() const {
         return push_descriptors;
@@ -305,6 +310,7 @@ private:
     bool extended_dynamic_state3_color_blend_eq{};
     bool extended_dynamic_state3_color_write_mask{};
     bool push_descriptors{};
+    bool dynamic_rendering{};
     bool custom_border_color{};
     bool index_type_uint8{};
     bool image_format_list{};

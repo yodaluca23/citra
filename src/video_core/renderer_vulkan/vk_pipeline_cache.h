@@ -162,6 +162,7 @@ class PipelineCache {
 
     private:
         const Instance& instance;
+        RenderpassCache& renderpass_cache;
         Common::ThreadWorker* worker;
 
         vk::Pipeline pipeline;
@@ -170,7 +171,6 @@ class PipelineCache {
 
         PipelineInfo info;
         std::array<Shader*, 3> stages;
-        vk::RenderPass renderpass;
     };
 
 public:

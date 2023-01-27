@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstring>
+#include <variant>
 #include "common/hash.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
 #include "video_core/renderer_vulkan/vk_common.h"
@@ -65,6 +66,10 @@ public:
     }
 
 private:
+    /// Begins a new rendering scope using dynamic rendering
+    void BeginRendering(Surface* const color, Surface* const depth_stencil, vk::Rect2D render_area,
+                        bool do_clear, vk::ClearValue clear);
+
     /// Creates a renderpass configured appropriately and stores it in cached_renderpasses
     vk::RenderPass CreateRenderPass(vk::Format color, vk::Format depth,
                                     vk::AttachmentLoadOp load_op, vk::ImageLayout initial_layout,
@@ -85,13 +90,27 @@ private:
         }
     };
 
+    struct RenderingState {
+        vk::ImageView color_view;
+        vk::ImageView depth_view;
+        vk::Rect2D render_area;
+        vk::ClearValue clear;
+        bool do_clear;
+
+        [[nodiscard]] bool operator==(const RenderpassState& other) const {
+            return std::memcmp(this, &other, sizeof(RenderpassState)) == 0;
+        }
+    };
+
     const Instance& instance;
     Scheduler& scheduler;
-    RenderpassState current_state{};
     vk::RenderPass present_renderpass{};
     vk::RenderPass cached_renderpasses[MAX_COLOR_FORMATS + 1][MAX_DEPTH_FORMATS + 1][2];
     std::unordered_map<FramebufferInfo, vk::Framebuffer> framebuffers;
+    bool rendering = false;
+    bool dynamic_rendering = false;
     u32 cmd_count{};
+    u64 state_hash{};
 };
 
 } // namespace Vulkan
