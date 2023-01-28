@@ -112,6 +112,10 @@ void Swapchain::AcquireNextImage() {
 MICROPROFILE_DEFINE(Vulkan_Present, "Vulkan", "Swapchain Present", MP_RGB(66, 185, 245));
 void Swapchain::Present() {
     scheduler.Record([this, index = image_index](vk::CommandBuffer) {
+        if (NeedsRecreation()) [[unlikely]] {
+            return;
+        }
+
         const vk::PresentInfoKHR present_info = {
             .waitSemaphoreCount = 1,
             .pWaitSemaphores = &present_ready[index],

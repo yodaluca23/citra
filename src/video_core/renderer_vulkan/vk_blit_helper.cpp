@@ -476,6 +476,10 @@ void BlitHelper::MakeComputePipelines() {
 }
 
 vk::Pipeline BlitHelper::MakeDepthStencilBlitPipeline() {
+    if (!instance.IsShaderStencilExportSupported()) {
+        return VK_NULL_HANDLE;
+    }
+
     const std::array stages = MakeStages(full_screen_vert, blit_depth_stencil_frag);
     const VideoCore::PixelFormat depth_stencil = VideoCore::PixelFormat::D24S8;
     const vk::Format depth_stencil_format = instance.GetTraits(depth_stencil).native;
