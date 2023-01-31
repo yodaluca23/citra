@@ -1009,14 +1009,14 @@ bool RasterizerVulkan::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
         return false;
     }
 
-    u32 scaled_width = src_surface->GetScaledWidth();
-    u32 scaled_height = src_surface->GetScaledHeight();
+    const u32 scaled_width = src_surface->GetScaledWidth();
+    const u32 scaled_height = src_surface->GetScaledHeight();
 
-    screen_info.display_texcoords = Common::Rectangle<float>(
+    screen_info.texcoords = Common::Rectangle<f32>(
         (float)src_rect.bottom / (float)scaled_height, (float)src_rect.left / (float)scaled_width,
         (float)src_rect.top / (float)scaled_height, (float)src_rect.right / (float)scaled_width);
 
-    screen_info.display_texture = &src_surface->alloc;
+    screen_info.image_view = src_surface->GetImageView();
 
     return true;
 }

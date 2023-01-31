@@ -30,16 +30,18 @@ struct FramebufferLayout;
 namespace Vulkan {
 
 struct TextureInfo {
-    ImageAlloc alloc;
     u32 width;
     u32 height;
     GPU::Regs::PixelFormat format;
+    vk::Image image;
+    vk::ImageView image_view;
+    VmaAllocation allocation;
 };
 
 struct ScreenInfo {
-    ImageAlloc* display_texture = nullptr;
-    Common::Rectangle<float> display_texcoords;
     TextureInfo texture;
+    Common::Rectangle<f32> texcoords;
+    vk::ImageView image_view;
     vk::Sampler sampler;
 };
 
@@ -55,11 +57,11 @@ struct PresentUniformData {
 
 static_assert(sizeof(PresentUniformData) < 256, "PresentUniformData must be below 256 bytes!");
 
-constexpr u32 PRESENT_PIPELINES = 3;
-
 class RasterizerVulkan;
 
 class RendererVulkan : public RendererBase {
+    static constexpr std::size_t PRESENT_PIPELINES = 3;
+
 public:
     explicit RendererVulkan(Frontend::EmuWindow& window, Frontend::EmuWindow* secondary_window);
     ~RendererVulkan() override;
@@ -100,7 +102,6 @@ private:
 
     void UpdateFramerate();
 
-    /// Loads framebuffer from emulated memory into the display information structure
     void LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& framebuffer,
                             ScreenInfo& screen_info, bool right_eye);
 
@@ -134,6 +135,7 @@ private:
 
     // Display information for top and bottom screens respectively
     std::array<ScreenInfo, 3> screen_infos{};
+    std::array<vk::DescriptorImageInfo, 4> present_textures{};
     PresentUniformData draw_info{};
     vk::ClearColorValue clear_color{};
 };

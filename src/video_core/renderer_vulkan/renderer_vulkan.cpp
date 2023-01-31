@@ -135,11 +135,8 @@ RendererVulkan::~RendererVulkan() {
     }
 
     for (auto& info : screen_infos) {
-        const HostTextureTag tag = {.format = info.texture.alloc.format,
-                                    .width = info.texture.width,
-                                    .height = info.texture.height};
-
-        runtime.Recycle(tag, std::move(info.texture.alloc));
+        device.destroyImageView(info.texture.image_view);
+        vmaDestroyImage(instance.GetAllocator(), info.texture.image, info.texture.allocation);
     }
 
     render_window.mailbox.reset();
@@ -205,6 +202,7 @@ void RendererVulkan::RenderToMailbox(const Layout::FramebufferLayout& layout,
     {
         MICROPROFILE_SCOPE(Vulkan_WaitPresent);
         frame = mailbox->GetRenderFrame();
+
         std::scoped_lock lock{frame->fence_mutex};
         [[maybe_unused]] vk::Result result =
             device.waitForFences(frame->present_done, false, std::numeric_limits<u64>::max());
@@ -269,22 +267,17 @@ void RendererVulkan::RenderToMailbox(const Layout::FramebufferLayout& layout,
 }
 
 void RendererVulkan::BeginRendering() {
-    vk::Device device = instance.GetDevice();
-
-    std::array<vk::DescriptorImageInfo, 4> present_textures;
     for (std::size_t i = 0; i < screen_infos.size(); i++) {
         const auto& info = screen_infos[i];
         present_textures[i] = vk::DescriptorImageInfo{
-            .imageView = info.display_texture ? info.display_texture->image_view
-                                              : info.texture.alloc.image_view,
+            .imageView = info.image_view,
             .imageLayout = vk::ImageLayout::eGeneral,
         };
     }
-
-    present_textures[3] = vk::DescriptorImageInfo{.sampler = present_samplers[current_sampler]};
+    present_textures[3].sampler = present_samplers[current_sampler];
 
     vk::DescriptorSet set = desc_manager.AllocateSet(present_descriptor_layout);
-    device.updateDescriptorSetWithTemplate(set, present_update_template, present_textures[0]);
+    instance.GetDevice().updateDescriptorSetWithTemplate(set, present_update_template, present_textures[0]);
 
     scheduler.Record([this, set, pipeline_index = current_pipeline](vk::CommandBuffer cmdbuf) {
         cmdbuf.bindPipeline(vk::PipelineBindPoint::eGraphics, present_pipelines[pipeline_index]);
@@ -317,6 +310,10 @@ void RendererVulkan::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& fram
 
     if (!rasterizer.AccelerateDisplay(framebuffer, framebuffer_addr, static_cast<u32>(pixel_stride),
                                       screen_info)) {
+        // Reset the screen info's display texture to its own permanent texture
+        screen_info.image_view = screen_info.texture.image_view;
+        screen_info.texcoords = {0.f, 0.f, 1.f, 1.f};
+
         ASSERT(false);
     }
 }
@@ -398,7 +395,6 @@ void RendererVulkan::BuildLayouts() {
         .templateType = vk::DescriptorUpdateTemplateType::eDescriptorSet,
         .descriptorSetLayout = present_descriptor_layout,
     };
-
     present_update_template = device.createDescriptorUpdateTemplate(template_info);
 
     const vk::PushConstantRange push_range = {
@@ -413,7 +409,6 @@ void RendererVulkan::BuildLayouts() {
         .pushConstantRangeCount = 1,
         .pPushConstantRanges = &push_range,
     };
-
     present_pipeline_layout = device.createPipelineLayout(layout_info);
 }
 
@@ -547,28 +542,63 @@ void RendererVulkan::BuildPipelines() {
 
 void RendererVulkan::ConfigureFramebufferTexture(TextureInfo& texture,
                                                  const GPU::Regs::FramebufferConfig& framebuffer) {
-    TextureInfo old_texture = std::move(texture);
-    texture = TextureInfo{
-        .alloc =
-            runtime.Allocate(framebuffer.width, framebuffer.height,
-                             VideoCore::PixelFormatFromGPUPixelFormat(framebuffer.color_format),
-                             VideoCore::TextureType::Texture2D),
-        .width = framebuffer.width,
-        .height = framebuffer.height,
-        .format = framebuffer.color_format,
+    vk::Device device = instance.GetDevice();
+    if (texture.image_view) {
+        device.destroyImageView(texture.image_view);
+    }
+    if (texture.image) {
+        vmaDestroyImage(instance.GetAllocator(), texture.image, texture.allocation);
+    }
+
+    const VideoCore::PixelFormat pixel_format = VideoCore::PixelFormatFromGPUPixelFormat(framebuffer.color_format);
+    const vk::Format format = instance.GetTraits(pixel_format).native;
+    const vk::ImageCreateInfo image_info = {
+        .imageType = vk::ImageType::e2D,
+        .format = format,
+        .extent = {framebuffer.width, framebuffer.height, 1},
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = vk::SampleCountFlagBits::e1,
+        .usage = vk::ImageUsageFlagBits::eSampled,
     };
 
-    // Recyle the old texture after allocation to avoid having duplicates of the same allocation in
-    // the recycler
-    if (old_texture.width != 0 && old_texture.height != 0) {
-        const HostTextureTag tag = {
-            .format = old_texture.alloc.format,
-            .width = old_texture.width,
-            .height = old_texture.height,
-        };
+    const VmaAllocationCreateInfo alloc_info = {
+        .flags = VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT,
+        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+        .requiredFlags = 0,
+        .preferredFlags = 0,
+        .pool = VK_NULL_HANDLE,
+        .pUserData = nullptr,
+    };
 
-        runtime.Recycle(tag, std::move(old_texture.alloc));
+    VkImage unsafe_image{};
+    VkImageCreateInfo unsafe_image_info = static_cast<VkImageCreateInfo>(image_info);
+
+    VkResult result = vmaCreateImage(instance.GetAllocator(), &unsafe_image_info, &alloc_info,
+                                     &unsafe_image, &texture.allocation, nullptr);
+    if (result != VK_SUCCESS) [[unlikely]] {
+        LOG_CRITICAL(Render_Vulkan, "Failed allocating texture with error {}", result);
+        UNREACHABLE();
     }
+    texture.image = vk::Image{unsafe_image};
+
+    const vk::ImageViewCreateInfo view_info = {
+        .image = texture.image,
+        .viewType = vk::ImageViewType::e2D,
+        .format = format,
+        .subresourceRange{
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+    };
+    texture.image_view = device.createImageView(view_info);
+
+    texture.width = framebuffer.width;
+    texture.height = framebuffer.height;
+    texture.format = framebuffer.color_format;
 }
 
 void RendererVulkan::LoadColorToActiveVkTexture(u8 color_r, u8 color_g, u8 color_b,
@@ -584,7 +614,7 @@ void RendererVulkan::LoadColorToActiveVkTexture(u8 color_r, u8 color_g, u8 color
     };
 
     renderpass_cache.ExitRenderpass();
-    scheduler.Record([image = texture.alloc.image, clear_color](vk::CommandBuffer cmdbuf) {
+    scheduler.Record([image = texture.image, clear_color](vk::CommandBuffer cmdbuf) {
         const vk::ImageSubresourceRange range = {
             .aspectMask = vk::ImageAspectFlagBits::eColor,
             .baseMipLevel = 0,
@@ -650,7 +680,7 @@ void RendererVulkan::ReloadPipeline() {
 
 void RendererVulkan::DrawSingleScreenRotated(u32 screen_id, float x, float y, float w, float h) {
     auto& screen_info = screen_infos[screen_id];
-    const auto& texcoords = screen_info.display_texcoords;
+    const auto& texcoords = screen_info.texcoords;
 
     u32 size = sizeof(ScreenRectVertex) * 4;
     auto [ptr, offset, invalidate] = vertex_buffer.Map(size, 16);
@@ -690,7 +720,7 @@ void RendererVulkan::DrawSingleScreenRotated(u32 screen_id, float x, float y, fl
 
 void RendererVulkan::DrawSingleScreen(u32 screen_id, float x, float y, float w, float h) {
     auto& screen_info = screen_infos[screen_id];
-    const auto& texcoords = screen_info.display_texcoords;
+    const auto& texcoords = screen_info.texcoords;
 
     u32 size = sizeof(ScreenRectVertex) * 4;
     auto [ptr, offset, invalidate] = vertex_buffer.Map(size, 16);
@@ -728,7 +758,7 @@ void RendererVulkan::DrawSingleScreen(u32 screen_id, float x, float y, float w, 
 void RendererVulkan::DrawSingleScreenStereoRotated(u32 screen_id_l, u32 screen_id_r, float x,
                                                    float y, float w, float h) {
     const ScreenInfo& screen_info_l = screen_infos[screen_id_l];
-    const auto& texcoords = screen_info_l.display_texcoords;
+    const auto& texcoords = screen_info_l.texcoords;
 
     u32 size = sizeof(ScreenRectVertex) * 4;
     auto [ptr, offset, invalidate] = vertex_buffer.Map(size, 16);
@@ -766,7 +796,7 @@ void RendererVulkan::DrawSingleScreenStereoRotated(u32 screen_id_l, u32 screen_i
 void RendererVulkan::DrawSingleScreenStereo(u32 screen_id_l, u32 screen_id_r, float x, float y,
                                             float w, float h) {
     const ScreenInfo& screen_info_l = screen_infos[screen_id_l];
-    const auto& texcoords = screen_info_l.display_texcoords;
+    const auto& texcoords = screen_info_l.texcoords;
 
     u32 size = sizeof(ScreenRectVertex) * 4;
     auto [ptr, offset, invalidate] = vertex_buffer.Map(size, 16);
