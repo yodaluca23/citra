@@ -11,6 +11,10 @@ RendererBase::RendererBase(Frontend::EmuWindow& window, Frontend::EmuWindow* sec
 
 RendererBase::~RendererBase() = default;
 
+void RendererBase::RefreshBaseSettings() {
+    UpdateCurrentFramebufferLayout();
+}
+
 void RendererBase::UpdateCurrentFramebufferLayout(bool is_portrait_mode) {
     const auto update_layout = [is_portrait_mode](Frontend::EmuWindow& window) {
         const Layout::FramebufferLayout& layout = window.GetFramebufferLayout();
@@ -20,4 +24,20 @@ void RendererBase::UpdateCurrentFramebufferLayout(bool is_portrait_mode) {
     if (secondary_window) {
         update_layout(*secondary_window);
     }
+}
+
+bool RendererBase::IsScreenshotPending() const {
+    return renderer_settings.screenshot_requested;
+}
+
+void RendererBase::RequestScreenshot(void* data, std::function<void()> callback,
+                                     const Layout::FramebufferLayout& layout) {
+    if (renderer_settings.screenshot_requested) {
+        LOG_ERROR(Render, "A screenshot is already requested or in progress, ignoring the request");
+        return;
+    }
+    renderer_settings.screenshot_bits = data;
+    renderer_settings.screenshot_complete_callback = callback;
+    renderer_settings.screenshot_framebuffer_layout = layout;
+    renderer_settings.screenshot_requested = true;
 }

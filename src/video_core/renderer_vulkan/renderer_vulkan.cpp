@@ -277,7 +277,8 @@ void RendererVulkan::BeginRendering() {
     present_textures[3].sampler = present_samplers[current_sampler];
 
     vk::DescriptorSet set = desc_manager.AllocateSet(present_descriptor_layout);
-    instance.GetDevice().updateDescriptorSetWithTemplate(set, present_update_template, present_textures[0]);
+    instance.GetDevice().updateDescriptorSetWithTemplate(set, present_update_template,
+                                                         present_textures[0]);
 
     scheduler.Record([this, set, pipeline_index = current_pipeline](vk::CommandBuffer cmdbuf) {
         cmdbuf.bindPipeline(vk::PipelineBindPoint::eGraphics, present_pipelines[pipeline_index]);
@@ -550,7 +551,8 @@ void RendererVulkan::ConfigureFramebufferTexture(TextureInfo& texture,
         vmaDestroyImage(instance.GetAllocator(), texture.image, texture.allocation);
     }
 
-    const VideoCore::PixelFormat pixel_format = VideoCore::PixelFormatFromGPUPixelFormat(framebuffer.color_format);
+    const VideoCore::PixelFormat pixel_format =
+        VideoCore::PixelFormatFromGPUPixelFormat(framebuffer.color_format);
     const vk::Format format = instance.GetTraits(pixel_format).native;
     const vk::ImageCreateInfo image_info = {
         .imageType = vk::ImageType::e2D,
@@ -1159,11 +1161,11 @@ void RendererVulkan::SwapBuffers() {
 }
 
 void RendererVulkan::RenderScreenshot() {
-    if (!VideoCore::g_renderer_screenshot_requested) {
+    if (!renderer_settings.screenshot_requested) {
         return;
     }
 
-    const Layout::FramebufferLayout layout{VideoCore::g_screenshot_framebuffer_layout};
+    const Layout::FramebufferLayout layout{renderer_settings.screenshot_framebuffer_layout};
     const vk::Extent2D extent = swapchain.GetExtent();
     const u32 width = std::min(layout.width, extent.width);
     const u32 height = std::min(layout.height, extent.height);
@@ -1354,19 +1356,18 @@ void RendererVulkan::RenderScreenshot() {
     const vk::SubresourceLayout subresource_layout =
         device.getImageSubresourceLayout(staging_image, subresource);
 
-    // Map image memory so we can start copying from it
+    // Copy backing image data to the QImage screenshot buffer
     const u8* data = reinterpret_cast<const u8*>(alloc_info.pMappedData);
-    std::memcpy(VideoCore::g_screenshot_bits, data + subresource_layout.offset,
+    std::memcpy(renderer_settings.screenshot_bits, data + subresource_layout.offset,
                 subresource_layout.size);
 
     // Destroy allocated resources
-    vmaDestroyImage(instance.GetAllocator(), unsafe_image, allocation);
     vmaDestroyImage(instance.GetAllocator(), frame.image, frame.allocation);
     device.destroyFramebuffer(frame.framebuffer);
     device.destroyImageView(frame.image_view);
 
-    VideoCore::g_screenshot_complete_callback();
-    VideoCore::g_renderer_screenshot_requested = false;
+    renderer_settings.screenshot_complete_callback();
+    renderer_settings.screenshot_requested = false;
 }
 
 void RendererVulkan::NotifySurfaceChanged() {
