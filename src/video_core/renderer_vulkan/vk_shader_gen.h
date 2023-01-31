@@ -181,9 +181,8 @@ struct PicaShaderConfigCommon {
  */
 struct PicaVSConfig : Common::HashableStruct<PicaShaderConfigCommon> {
     explicit PicaVSConfig(const Pica::RasterizerRegs& rasterizer, const Pica::ShaderRegs& regs,
-                          Pica::Shader::ShaderSetup& setup) {
-        state.Init(rasterizer, regs, setup);
-    }
+                          Pica::Shader::ShaderSetup& setup, const Instance& instance);
+    bool use_clip_planes;
 };
 
 struct PicaGSConfigCommonRaw {
@@ -206,9 +205,8 @@ struct PicaGSConfigCommonRaw {
  * shader pipeline
  */
 struct PicaFixedGSConfig : Common::HashableStruct<PicaGSConfigCommonRaw> {
-    explicit PicaFixedGSConfig(const Pica::Regs& regs) {
-        state.Init(regs);
-    }
+    explicit PicaFixedGSConfig(const Pica::Regs& regs, const Instance& instance);
+    bool use_clip_planes;
 };
 
 /**
@@ -217,7 +215,7 @@ struct PicaFixedGSConfig : Common::HashableStruct<PicaGSConfigCommonRaw> {
  * @param separable_shader generates shader that can be used for separate shader object
  * @returns String of the shader source code
  */
-std::string GenerateTrivialVertexShader();
+std::string GenerateTrivialVertexShader(bool use_clip_planes);
 
 /**
  * Generates the GLSL vertex shader program source code for the given VS program

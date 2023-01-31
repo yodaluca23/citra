@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <mutex>
 #include <vector>
 #include "common/common_types.h"
 #include "video_core/renderer_vulkan/vk_common.h"
@@ -23,14 +24,19 @@ public:
     void Create(vk::SurfaceKHR new_surface = {});
 
     /// Acquires the next image in the swapchain.
-    void AcquireNextImage();
+    bool AcquireNextImage();
 
     /// Presents the current image and move to the next one
     void Present();
 
     /// Returns true when the swapchain should be recreated
     [[nodiscard]] bool NeedsRecreation() const {
-        return is_suboptimal || is_outdated;
+        return needs_recreation;
+    }
+
+    /// Notfies that the swapchain needs recreation
+    void SetNeedsRecreation(bool value) noexcept {
+        needs_recreation = value;
     }
 
     /// Returns current swapchain state
@@ -41,11 +47,6 @@ public:
     /// Returns the swapchain surface
     [[nodiscard]] vk::SurfaceKHR GetSurface() const {
         return surface;
-    }
-
-    /// Returns the current framebuffe
-    [[nodiscard]] vk::Framebuffer GetFramebuffer() const {
-        return framebuffers[image_index];
     }
 
     /// Returns the current image
@@ -102,16 +103,12 @@ private:
     vk::SurfaceTransformFlagBitsKHR transform;
     vk::CompositeAlphaFlagBitsKHR composite_alpha;
     std::vector<vk::Image> images;
-    std::vector<vk::ImageView> image_views;
-    std::vector<vk::Framebuffer> framebuffers;
-    std::vector<u64> resource_ticks;
     std::vector<vk::Semaphore> image_acquired;
     std::vector<vk::Semaphore> present_ready;
     u32 image_count = 0;
     u32 image_index = 0;
     u32 frame_index = 0;
-    bool is_outdated = true;
-    bool is_suboptimal = true;
+    bool needs_recreation = true;
 };
 
 } // namespace Vulkan

@@ -8,7 +8,6 @@
 #include "common/logging/log.h"
 #include "common/settings.h"
 #include "core/core.h"
-#include "core/frontend/emu_window.h"
 #include "core/frontend/framebuffer_layout.h"
 #include "core/hw/gpu.h"
 #include "core/hw/hw.h"
@@ -18,6 +17,7 @@
 #include "video_core/renderer_vulkan/renderer_vulkan.h"
 #include "video_core/renderer_vulkan/vk_platform.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
+#include "video_core/renderer_vulkan/vk_texture_mailbox.h"
 #include "video_core/video_core.h"
 
 #include "video_core/host_shaders/vulkan_present_anaglyph_frag_spv.h"
@@ -26,6 +26,10 @@
 #include "video_core/host_shaders/vulkan_present_vert_spv.h"
 
 #include <vk_mem_alloc.h>
+
+MICROPROFILE_DEFINE(Vulkan_RenderFrame, "Vulkan", "Render Frame", MP_RGB(128, 128, 64));
+MICROPROFILE_DEFINE(Vulkan_WaitPresent, "Vulkan", "Wait For Present", MP_RGB(128, 128, 128));
+MICROPROFILE_DEFINE(Vulkan_SwapchainCopy, "Vulkan", "Swapchain Copy", MP_RGB(64, 64, 0));
 
 namespace Vulkan {
 
@@ -109,7 +113,7 @@ RendererVulkan::RendererVulkan(Frontend::EmuWindow& window, Frontend::EmuWindow*
                     VERTEX_BUFFER_SIZE},
       rasterizer{render_window, instance, scheduler, desc_manager, runtime, renderpass_cache} {
     Report();
-    window.mailbox = nullptr;
+    window.mailbox = std::make_unique<TextureMailbox>(instance, swapchain, renderpass_cache);
 }
 
 RendererVulkan::~RendererVulkan() {
@@ -137,6 +141,8 @@ RendererVulkan::~RendererVulkan() {
 
         runtime.Recycle(tag, std::move(info.texture.alloc));
     }
+
+    render_window.mailbox.reset();
 }
 
 VideoCore::ResultStatus RendererVulkan::Init() {
@@ -191,6 +197,77 @@ void RendererVulkan::PrepareRendertarget() {
     }
 }
 
+void RendererVulkan::RenderToMailbox(const Layout::FramebufferLayout& layout,
+                                     std::unique_ptr<Frontend::TextureMailbox>& mailbox,
+                                     bool flipped) {
+    const vk::Device device = instance.GetDevice();
+    Frontend::Frame* frame;
+    {
+        MICROPROFILE_SCOPE(Vulkan_WaitPresent);
+        frame = mailbox->GetRenderFrame();
+        std::scoped_lock lock{frame->fence_mutex};
+        [[maybe_unused]] vk::Result result =
+            device.waitForFences(frame->present_done, false, std::numeric_limits<u64>::max());
+        device.resetFences(frame->present_done);
+    }
+
+    {
+        MICROPROFILE_SCOPE(Vulkan_RenderFrame);
+
+        const auto [width, height] = swapchain.GetExtent();
+        if (width != frame->width || height != frame->height) {
+            LOG_INFO(Render_Vulkan, "Reloading render frame");
+            mailbox->ReloadRenderFrame(frame, width, height);
+        }
+
+        scheduler.Record([layout](vk::CommandBuffer cmdbuf) {
+            const vk::Viewport viewport = {
+                .x = 0.0f,
+                .y = 0.0f,
+                .width = static_cast<float>(layout.width),
+                .height = static_cast<float>(layout.height),
+                .minDepth = 0.0f,
+                .maxDepth = 1.0f,
+            };
+
+            const vk::Rect2D scissor = {
+                .offset = {0, 0},
+                .extent = {layout.width, layout.height},
+            };
+
+            cmdbuf.setViewport(0, viewport);
+            cmdbuf.setScissor(0, scissor);
+        });
+
+        renderpass_cache.ExitRenderpass();
+
+        scheduler.Record([this, framebuffer = frame->framebuffer, width = frame->width,
+                          height = frame->height](vk::CommandBuffer cmdbuf) {
+            const vk::ClearValue clear{.color = clear_color};
+            const vk::RenderPassBeginInfo renderpass_begin_info = {
+                .renderPass = renderpass_cache.GetPresentRenderpass(),
+                .framebuffer = framebuffer,
+                .renderArea =
+                    vk::Rect2D{
+                        .offset = {0, 0},
+                        .extent = {width, height},
+                    },
+                .clearValueCount = 1,
+                .pClearValues = &clear,
+            };
+
+            cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
+        });
+
+        DrawScreens(layout, flipped);
+
+        scheduler.Flush(frame->render_ready);
+        scheduler.Record(
+            [&mailbox, frame](vk::CommandBuffer) { mailbox->ReleaseRenderFrame(frame); });
+        scheduler.DispatchWork();
+    }
+}
+
 void RendererVulkan::BeginRendering() {
     vk::Device device = instance.GetDevice();
 
@@ -215,26 +292,6 @@ void RendererVulkan::BeginRendering() {
         cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, present_pipeline_layout, 0, set,
                                   {});
     });
-
-    renderpass_cache.ExitRenderpass();
-
-    scheduler.Record([this, framebuffer = swapchain.GetFramebuffer(),
-                      extent = swapchain.GetExtent()](vk::CommandBuffer cmdbuf) {
-        const vk::ClearValue clear{.color = clear_color};
-        const vk::RenderPassBeginInfo renderpass_begin_info = {
-            .renderPass = renderpass_cache.GetPresentRenderpass(),
-            .framebuffer = framebuffer,
-            .renderArea =
-                vk::Rect2D{
-                    .offset = {0, 0},
-                    .extent = extent,
-                },
-            .clearValueCount = 1,
-            .pClearValues = &clear,
-        };
-
-        cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
-    });
 }
 
 void RendererVulkan::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& framebuffer,
@@ -255,27 +312,12 @@ void RendererVulkan::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& fram
     int bpp = GPU::Regs::BytesPerPixel(framebuffer.color_format);
     std::size_t pixel_stride = framebuffer.stride / bpp;
 
-    // OpenGL only supports specifying a stride in units of pixels, not bytes, unfortunately
     ASSERT(pixel_stride * bpp == framebuffer.stride);
-
-    // Ensure no bad interactions with GL_UNPACK_ALIGNMENT, which by default
-    // only allows rows to have a memory alignement of 4.
     ASSERT(pixel_stride % 4 == 0);
 
     if (!rasterizer.AccelerateDisplay(framebuffer, framebuffer_addr, static_cast<u32>(pixel_stride),
                                       screen_info)) {
         ASSERT(false);
-        // Reset the screen info's display texture to its own permanent texture
-        /*screen_info.display_texture = &screen_info.texture;
-        screen_info.display_texcoords = Common::Rectangle<float>(0.f, 0.f, 1.f, 1.f);
-
-        Memory::RasterizerFlushRegion(framebuffer_addr, framebuffer.stride * framebuffer.height);
-
-        vk::Rect2D region{{0, 0}, {framebuffer.width, framebuffer.height}};
-        std::span<u8> framebuffer_data(VideoCore::g_memory->GetPhysicalPointer(framebuffer_addr),
-                                       screen_info.texture.GetSize());
-
-        screen_info.texture.Upload(0, 1, pixel_stride, region, framebuffer_data);*/
     }
 }
 
@@ -328,7 +370,7 @@ void RendererVulkan::BuildLayouts() {
         .pBindings = present_layout_bindings.data(),
     };
 
-    vk::Device device = instance.GetDevice();
+    const vk::Device device = instance.GetDevice();
     present_descriptor_layout = device.createDescriptorSetLayout(present_layout_info);
 
     const std::array update_template_entries = {
@@ -911,44 +953,165 @@ void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool f
     scheduler.Record([](vk::CommandBuffer cmdbuf) { cmdbuf.endRenderPass(); });
 }
 
+void RendererVulkan::TryPresent(int timeout_ms, bool is_secondary) {
+    Frontend::Frame* frame = render_window.mailbox->TryGetPresentFrame(timeout_ms);
+    if (!frame) {
+        LOG_DEBUG(Render_Vulkan, "TryGetPresentFrame returned no frame to present");
+        return;
+    }
+
+#if ANDROID
+    // On Android swapchain invalidations are always due to surface changes.
+    // These are processed on the main thread so wait for it to recreate
+    // the swapchain for us.
+    std::unique_lock lock{swapchain_mutex};
+    swapchain_cv.wait(lock, [this]() { return !swapchain.NeedsRecreation(); });
+#endif
+
+    while (!swapchain.AcquireNextImage()) {
+#if ANDROID
+        swapchain_cv.wait(lock, [this]() { return !swapchain.NeedsRecreation(); });
+#else
+        std::scoped_lock lock{scheduler.QueueMutex()};
+        instance.GetGraphicsQueue().waitIdle();
+        swapchain.Create();
+#endif
+    }
+
+    {
+        MICROPROFILE_SCOPE(Vulkan_SwapchainCopy);
+        const vk::Image swapchain_image = swapchain.Image();
+
+        const vk::CommandBufferBeginInfo begin_info = {
+            .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+        };
+        const vk::CommandBuffer cmdbuf = frame->cmdbuf;
+        cmdbuf.begin(begin_info);
+
+        const auto [width, height] = swapchain.GetExtent();
+        const u32 copy_width = std::min(width, frame->width);
+        const u32 copy_height = std::min(height, frame->height);
+
+        const vk::ImageCopy image_copy = {
+            .srcSubresource{
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .mipLevel = 0,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+            .srcOffset = {0, 0, 0},
+            .dstSubresource{
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .mipLevel = 0,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+            .dstOffset = {0, 0, 0},
+            .extent = {copy_width, copy_height, 1},
+        };
+
+        const std::array pre_barriers{
+            vk::ImageMemoryBarrier{
+                .srcAccessMask = vk::AccessFlagBits::eNone,
+                .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
+                .oldLayout = vk::ImageLayout::eUndefined,
+                .newLayout = vk::ImageLayout::eTransferDstOptimal,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = swapchain_image,
+                .subresourceRange{
+                    .aspectMask = vk::ImageAspectFlagBits::eColor,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                },
+            },
+            vk::ImageMemoryBarrier{
+                .srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite,
+                .dstAccessMask = vk::AccessFlagBits::eTransferRead,
+                .oldLayout = vk::ImageLayout::eTransferSrcOptimal,
+                .newLayout = vk::ImageLayout::eTransferSrcOptimal,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = frame->image,
+                .subresourceRange{
+                    .aspectMask = vk::ImageAspectFlagBits::eColor,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                },
+            },
+        };
+        const vk::ImageMemoryBarrier post_barrier{
+            .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .dstAccessMask = vk::AccessFlagBits::eNone,
+            .oldLayout = vk::ImageLayout::eTransferDstOptimal,
+            .newLayout = vk::ImageLayout::ePresentSrcKHR,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = swapchain_image,
+            .subresourceRange{
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = VK_REMAINING_ARRAY_LAYERS,
+            },
+        };
+
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eColorAttachmentOutput,
+                               vk::PipelineStageFlagBits::eTransfer,
+                               vk::DependencyFlagBits::eByRegion, {}, {}, pre_barriers);
+
+        cmdbuf.copyImage(frame->image, vk::ImageLayout::eTransferSrcOptimal, swapchain_image,
+                         vk::ImageLayout::eTransferDstOptimal, image_copy);
+
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                               vk::PipelineStageFlagBits::eBottomOfPipe,
+                               vk::DependencyFlagBits::eByRegion, {}, {}, post_barrier);
+
+        cmdbuf.end();
+
+        static constexpr std::array<vk::PipelineStageFlags, 2> wait_stage_masks = {
+            vk::PipelineStageFlagBits::eColorAttachmentOutput,
+            vk::PipelineStageFlagBits::eAllCommands,
+        };
+
+        const vk::Semaphore present_ready = swapchain.GetPresentReadySemaphore();
+        const vk::Semaphore image_acquired = swapchain.GetImageAcquiredSemaphore();
+        const std::array wait_semaphores = {image_acquired, frame->render_ready};
+
+        vk::SubmitInfo submit_info = {
+            .waitSemaphoreCount = static_cast<u32>(wait_semaphores.size()),
+            .pWaitSemaphores = wait_semaphores.data(),
+            .pWaitDstStageMask = wait_stage_masks.data(),
+            .commandBufferCount = 1u,
+            .pCommandBuffers = &cmdbuf,
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &present_ready,
+        };
+
+        try {
+            std::scoped_lock lock{scheduler.QueueMutex(), frame->fence_mutex};
+            instance.GetGraphicsQueue().submit(submit_info, frame->present_done);
+        } catch (vk::DeviceLostError& err) {
+            LOG_CRITICAL(Render_Vulkan, "Device lost during present submit: {}", err.what());
+            UNREACHABLE();
+        }
+    }
+
+    swapchain.Present();
+    render_window.mailbox->ReleasePresentFrame(frame);
+}
+
 void RendererVulkan::SwapBuffers() {
     const auto& layout = render_window.GetFramebufferLayout();
     PrepareRendertarget();
     RenderScreenshot();
 
-    do {
-        if (swapchain.NeedsRecreation()) {
-            swapchain.Create();
-        }
-        scheduler.WaitWorker();
-        swapchain.AcquireNextImage();
-    } while (swapchain.NeedsRecreation());
-
-    scheduler.Record([layout](vk::CommandBuffer cmdbuf) {
-        const vk::Viewport viewport = {
-            .x = 0.0f,
-            .y = 0.0f,
-            .width = static_cast<float>(layout.width),
-            .height = static_cast<float>(layout.height),
-            .minDepth = 0.0f,
-            .maxDepth = 1.0f,
-        };
-
-        const vk::Rect2D scissor = {
-            .offset = {0, 0},
-            .extent = {layout.width, layout.height},
-        };
-
-        cmdbuf.setViewport(0, viewport);
-        cmdbuf.setScissor(0, scissor);
-    });
-
-    DrawScreens(layout, false);
-
-    const vk::Semaphore image_acquired = swapchain.GetImageAcquiredSemaphore();
-    const vk::Semaphore present_ready = swapchain.GetPresentReadySemaphore();
-    scheduler.Flush(present_ready, image_acquired);
-    swapchain.Present();
+    RenderToMailbox(layout, render_window.mailbox, false);
 
     m_current_frame++;
 
@@ -978,12 +1141,11 @@ void RendererVulkan::RenderScreenshot() {
     const vk::ImageCreateInfo staging_image_info = {
         .imageType = vk::ImageType::e2D,
         .format = vk::Format::eB8G8R8A8Unorm,
-        .extent =
-            {
-                .width = width,
-                .height = height,
-                .depth = 1,
-            },
+        .extent{
+            .width = width,
+            .height = height,
+            .depth = 1,
+        },
         .mipLevels = 1,
         .arrayLayers = 1,
         .samples = vk::SampleCountFlagBits::e1,
@@ -993,7 +1155,8 @@ void RendererVulkan::RenderScreenshot() {
     };
 
     const VmaAllocationCreateInfo alloc_create_info = {
-        .flags = VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        .flags = VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT |
+                 VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
         .usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
         .requiredFlags = 0,
         .preferredFlags = 0,
@@ -1012,112 +1175,139 @@ void RendererVulkan::RenderScreenshot() {
         LOG_CRITICAL(Render_Vulkan, "Failed allocating texture with error {}", result);
         UNREACHABLE();
     }
-
     vk::Image staging_image{unsafe_image};
 
+    Frontend::Frame frame{};
+    render_window.mailbox->ReloadRenderFrame(&frame, width, height);
+
     renderpass_cache.ExitRenderpass();
-    scheduler.Record([width, height, swapchain_image = swapchain.Image(),
-                      staging_image](vk::CommandBuffer cmdbuf) {
-        const std::array read_barriers = {
-            vk::ImageMemoryBarrier{
-                .srcAccessMask = vk::AccessFlagBits::eMemoryWrite,
-                .dstAccessMask = vk::AccessFlagBits::eTransferRead,
-                .oldLayout = vk::ImageLayout::ePresentSrcKHR,
-                .newLayout = vk::ImageLayout::eTransferSrcOptimal,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = swapchain_image,
-                .subresourceRange{
-                    .aspectMask = vk::ImageAspectFlagBits::eColor,
-                    .baseMipLevel = 0,
-                    .levelCount = VK_REMAINING_MIP_LEVELS,
-                    .baseArrayLayer = 0,
-                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
+
+    scheduler.Record([this, framebuffer = frame.framebuffer, width = frame.width,
+                      height = frame.height](vk::CommandBuffer cmdbuf) {
+        const vk::ClearValue clear{.color = clear_color};
+        const vk::RenderPassBeginInfo renderpass_begin_info = {
+            .renderPass = renderpass_cache.GetPresentRenderpass(),
+            .framebuffer = framebuffer,
+            .renderArea =
+                vk::Rect2D{
+                    .offset = {0, 0},
+                    .extent = {width, height},
                 },
-            },
-            vk::ImageMemoryBarrier{
-                .srcAccessMask = vk::AccessFlagBits::eNone,
-                .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
-                .oldLayout = vk::ImageLayout::eUndefined,
-                .newLayout = vk::ImageLayout::eTransferDstOptimal,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = staging_image,
-                .subresourceRange{
-                    .aspectMask = vk::ImageAspectFlagBits::eColor,
-                    .baseMipLevel = 0,
-                    .levelCount = VK_REMAINING_MIP_LEVELS,
-                    .baseArrayLayer = 0,
-                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                },
-            },
-        };
-        const std::array write_barriers = {
-            vk::ImageMemoryBarrier{
-                .srcAccessMask = vk::AccessFlagBits::eTransferRead,
-                .dstAccessMask = vk::AccessFlagBits::eMemoryWrite,
-                .oldLayout = vk::ImageLayout::eTransferSrcOptimal,
-                .newLayout = vk::ImageLayout::ePresentSrcKHR,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = swapchain_image,
-                .subresourceRange{
-                    .aspectMask = vk::ImageAspectFlagBits::eColor,
-                    .baseMipLevel = 0,
-                    .levelCount = VK_REMAINING_MIP_LEVELS,
-                    .baseArrayLayer = 0,
-                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                },
-            },
-            vk::ImageMemoryBarrier{
-                .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
-                .dstAccessMask = vk::AccessFlagBits::eMemoryRead,
-                .oldLayout = vk::ImageLayout::eTransferDstOptimal,
-                .newLayout = vk::ImageLayout::eGeneral,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = staging_image,
-                .subresourceRange{
-                    .aspectMask = vk::ImageAspectFlagBits::eColor,
-                    .baseMipLevel = 0,
-                    .levelCount = VK_REMAINING_MIP_LEVELS,
-                    .baseArrayLayer = 0,
-                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                },
-            },
+            .clearValueCount = 1,
+            .pClearValues = &clear,
         };
 
-        const std::array offsets = {
-            vk::Offset3D{0, 0, 0},
-            vk::Offset3D{static_cast<s32>(width), static_cast<s32>(height), 1},
-        };
-
-        const vk::ImageBlit blit_area = {
-            .srcSubresource{
-                .aspectMask = vk::ImageAspectFlagBits::eColor,
-                .mipLevel = 0,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            },
-            .srcOffsets = offsets,
-            .dstSubresource{
-                .aspectMask = vk::ImageAspectFlagBits::eColor,
-                .mipLevel = 0,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            },
-            .dstOffsets = offsets,
-        };
-
-        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
-                               vk::PipelineStageFlagBits::eTransfer,
-                               vk::DependencyFlagBits::eByRegion, {}, {}, read_barriers);
-        cmdbuf.blitImage(swapchain_image, vk::ImageLayout::eTransferSrcOptimal, staging_image,
-                         vk::ImageLayout::eTransferDstOptimal, blit_area, vk::Filter::eNearest);
-        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                               vk::PipelineStageFlagBits::eAllCommands,
-                               vk::DependencyFlagBits::eByRegion, {}, {}, write_barriers);
+        cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
     });
+
+    DrawScreens(layout, false);
+
+    scheduler.Record(
+        [width, height, source_image = frame.image, staging_image](vk::CommandBuffer cmdbuf) {
+            const std::array read_barriers = {
+                vk::ImageMemoryBarrier{
+                    .srcAccessMask = vk::AccessFlagBits::eMemoryWrite,
+                    .dstAccessMask = vk::AccessFlagBits::eTransferRead,
+                    .oldLayout = vk::ImageLayout::eTransferSrcOptimal,
+                    .newLayout = vk::ImageLayout::eTransferSrcOptimal,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .image = source_image,
+                    .subresourceRange{
+                        .aspectMask = vk::ImageAspectFlagBits::eColor,
+                        .baseMipLevel = 0,
+                        .levelCount = VK_REMAINING_MIP_LEVELS,
+                        .baseArrayLayer = 0,
+                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                    },
+                },
+                vk::ImageMemoryBarrier{
+                    .srcAccessMask = vk::AccessFlagBits::eNone,
+                    .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
+                    .oldLayout = vk::ImageLayout::eUndefined,
+                    .newLayout = vk::ImageLayout::eTransferDstOptimal,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .image = staging_image,
+                    .subresourceRange{
+                        .aspectMask = vk::ImageAspectFlagBits::eColor,
+                        .baseMipLevel = 0,
+                        .levelCount = VK_REMAINING_MIP_LEVELS,
+                        .baseArrayLayer = 0,
+                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                    },
+                },
+            };
+            const std::array write_barriers = {
+                vk::ImageMemoryBarrier{
+                    .srcAccessMask = vk::AccessFlagBits::eTransferRead,
+                    .dstAccessMask = vk::AccessFlagBits::eMemoryWrite,
+                    .oldLayout = vk::ImageLayout::eTransferSrcOptimal,
+                    .newLayout = vk::ImageLayout::eTransferSrcOptimal,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .image = source_image,
+                    .subresourceRange{
+                        .aspectMask = vk::ImageAspectFlagBits::eColor,
+                        .baseMipLevel = 0,
+                        .levelCount = VK_REMAINING_MIP_LEVELS,
+                        .baseArrayLayer = 0,
+                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                    },
+                },
+                vk::ImageMemoryBarrier{
+                    .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+                    .dstAccessMask = vk::AccessFlagBits::eMemoryRead,
+                    .oldLayout = vk::ImageLayout::eTransferDstOptimal,
+                    .newLayout = vk::ImageLayout::eGeneral,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .image = staging_image,
+                    .subresourceRange{
+                        .aspectMask = vk::ImageAspectFlagBits::eColor,
+                        .baseMipLevel = 0,
+                        .levelCount = VK_REMAINING_MIP_LEVELS,
+                        .baseArrayLayer = 0,
+                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                    },
+                },
+            };
+            static constexpr vk::MemoryBarrier memory_write_barrier = {
+                .srcAccessMask = vk::AccessFlagBits::eMemoryWrite,
+                .dstAccessMask = vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite,
+            };
+
+            const std::array offsets = {
+                vk::Offset3D{0, 0, 0},
+                vk::Offset3D{static_cast<s32>(width), static_cast<s32>(height), 1},
+            };
+
+            const vk::ImageBlit blit_area = {
+                .srcSubresource{
+                    .aspectMask = vk::ImageAspectFlagBits::eColor,
+                    .mipLevel = 0,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+                .srcOffsets = offsets,
+                .dstSubresource{
+                    .aspectMask = vk::ImageAspectFlagBits::eColor,
+                    .mipLevel = 0,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+                .dstOffsets = offsets,
+            };
+
+            cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
+                                   vk::PipelineStageFlagBits::eTransfer,
+                                   vk::DependencyFlagBits::eByRegion, {}, {}, read_barriers);
+            cmdbuf.blitImage(source_image, vk::ImageLayout::eTransferSrcOptimal, staging_image,
+                             vk::ImageLayout::eTransferDstOptimal, blit_area, vk::Filter::eNearest);
+            cmdbuf.pipelineBarrier(
+                vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eAllCommands,
+                vk::DependencyFlagBits::eByRegion, memory_write_barrier, {}, write_barriers);
+        });
 
     // Ensure the copy is fully completed before saving the screenshot
     scheduler.Finish();
@@ -1139,8 +1329,11 @@ void RendererVulkan::RenderScreenshot() {
     std::memcpy(VideoCore::g_screenshot_bits, data + subresource_layout.offset,
                 subresource_layout.size);
 
-    // Destroy staging image
+    // Destroy allocated resources
     vmaDestroyImage(instance.GetAllocator(), unsafe_image, allocation);
+    vmaDestroyImage(instance.GetAllocator(), frame.image, frame.allocation);
+    device.destroyFramebuffer(frame.framebuffer);
+    device.destroyImageView(frame.image_view);
 
     VideoCore::g_screenshot_complete_callback();
     VideoCore::g_renderer_screenshot_requested = false;
@@ -1149,7 +1342,12 @@ void RendererVulkan::RenderScreenshot() {
 void RendererVulkan::NotifySurfaceChanged() {
     scheduler.Finish();
     vk::SurfaceKHR new_surface = CreateSurface(instance.GetInstance(), render_window);
-    swapchain.Create(new_surface);
+    {
+        std::scoped_lock lock{swapchain_mutex};
+        swapchain.SetNeedsRecreation(true);
+        swapchain.Create(new_surface);
+        swapchain_cv.notify_one();
+    }
 }
 
 void RendererVulkan::Report() const {

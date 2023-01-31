@@ -121,6 +121,8 @@ add_library(video_core STATIC
     renderer_vulkan/vk_stream_buffer.h
     renderer_vulkan/vk_swapchain.cpp
     renderer_vulkan/vk_swapchain.h
+    renderer_vulkan/vk_texture_mailbox.cpp
+    renderer_vulkan/vk_texture_mailbox.h
     renderer_vulkan/vk_texture_runtime.cpp
     renderer_vulkan/vk_texture_runtime.h
     shader/debug_data.h

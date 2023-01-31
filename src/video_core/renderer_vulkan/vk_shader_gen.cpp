@@ -26,7 +26,7 @@ namespace Vulkan {
 
 const std::string UniformBlockDef = Pica::Shader::BuildShaderUniformDefinitions("binding = 1,");
 
-static std::string GetVertexInterfaceDeclaration(bool is_output) {
+static std::string GetVertexInterfaceDeclaration(bool is_output, bool use_clip_planes = false) {
     std::string out;
 
     const auto append_variable = [&](std::string_view var, int location) {
@@ -44,12 +44,12 @@ static std::string GetVertexInterfaceDeclaration(bool is_output) {
 
     if (is_output) {
         // gl_PerVertex redeclaration is required for separate shader object
-        out += R"(
-out gl_PerVertex {
-    vec4 gl_Position;
-    float gl_ClipDistance[2];
-};
-)";
+        out += "out gl_PerVertex {\n";
+        out += "    vec4 gl_Position;\n";
+        if (use_clip_planes) {
+            out += "    float gl_ClipDistance[2];\n";
+        }
+        out += "};\n";
     }
 
     return out;
@@ -237,6 +237,12 @@ void PicaShaderConfigCommon::Init(const Pica::RasterizerRegs& rasterizer,
     }
 }
 
+PicaVSConfig::PicaVSConfig(const Pica::RasterizerRegs& rasterizer, const Pica::ShaderRegs& regs,
+                           Pica::Shader::ShaderSetup& setup, const Instance& instance) {
+    state.Init(rasterizer, regs, setup);
+    use_clip_planes = instance.IsShaderClipDistanceSupported();
+}
+
 void PicaGSConfigCommonRaw::Init(const Pica::Regs& regs) {
     vs_output_attributes = Common::BitSet<u32>(regs.vs.output_mask).Count();
     gs_output_attributes = vs_output_attributes;
@@ -258,6 +264,11 @@ void PicaGSConfigCommonRaw::Init(const Pica::Regs& regs) {
             }
         }
     }
+}
+
+PicaFixedGSConfig::PicaFixedGSConfig(const Pica::Regs& regs, const Instance& instance) {
+    state.Init(regs);
+    use_clip_planes = instance.IsShaderClipDistanceSupported();
 }
 
 /// Detects if a TEV stage is configured to be skipped (to avoid generating unnecessary code)
@@ -1555,7 +1566,7 @@ do {
     return out;
 }
 
-std::string GenerateTrivialVertexShader() {
+std::string GenerateTrivialVertexShader(bool use_clip_planes) {
     std::string out = "#version 450 core\n"
                       "#extension GL_ARB_separate_shader_objects : enable\n\n";
     out +=
@@ -1570,7 +1581,7 @@ std::string GenerateTrivialVertexShader() {
                     ATTRIBUTE_POSITION, ATTRIBUTE_COLOR, ATTRIBUTE_TEXCOORD0, ATTRIBUTE_TEXCOORD1,
                     ATTRIBUTE_TEXCOORD2, ATTRIBUTE_TEXCOORD0_W, ATTRIBUTE_NORMQUAT, ATTRIBUTE_VIEW);
 
-    out += GetVertexInterfaceDeclaration(true);
+    out += GetVertexInterfaceDeclaration(true, use_clip_planes);
 
     out += UniformBlockDef;
 
@@ -1586,15 +1597,19 @@ void main() {
     view = vert_view;
     gl_Position = vert_position;
     gl_Position.z = (gl_Position.z + gl_Position.w) / 2.0;
-
-    gl_ClipDistance[0] = -vert_position.z; // fixed PICA clipping plane z <= 0
-    if (enable_clip1) {
-        gl_ClipDistance[1] = dot(clip_coef, vert_position);
-    } else {
-        gl_ClipDistance[1] = 0;
-    }
-}
 )";
+    if (use_clip_planes) {
+        out += R"(
+        gl_ClipDistance[0] = -vert_position.z; // fixed PICA clipping plane z <= 0
+        if (enable_clip1) {
+            gl_ClipDistance[1] = dot(clip_coef, vert_position);
+        } else {
+            gl_ClipDistance[1] = 0;
+        }
+        )";
+    }
+
+    out += "}\n";
 
     return out;
 }
@@ -1638,7 +1653,7 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
 
 )";
     if (!config.state.use_geometry_shader) {
-        out += GetVertexInterfaceDeclaration(true);
+        out += GetVertexInterfaceDeclaration(true, config.use_clip_planes);
     }
 
     // input attributes declaration
@@ -1693,12 +1708,14 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
                semantic(VSOutputAttributes::POSITION_W) + ");\n";
         out += "    gl_Position = vtx_pos;\n";
         out += "    gl_Position.z = (gl_Position.z + gl_Position.w) / 2.0;\n";
-        out += "    gl_ClipDistance[0] = -vtx_pos.z;\n"; // fixed PICA clipping plane z <= 0
-        out += "    if (enable_clip1) {\n";
-        out += "        gl_ClipDistance[1] = dot(clip_coef, vtx_pos);\n";
-        out += "    } else {\n";
-        out += "        gl_ClipDistance[1] = 0;\n";
-        out += "    }\n\n";
+        if (config.use_clip_planes) {
+            out += "    gl_ClipDistance[0] = -vtx_pos.z;\n"; // fixed PICA clipping plane z <= 0
+            out += "    if (enable_clip1) {\n";
+            out += "        gl_ClipDistance[1] = dot(clip_coef, vtx_pos);\n";
+            out += "    } else {\n";
+            out += "        gl_ClipDistance[1] = 0;\n";
+            out += "    }\n\n";
+        }
 
         out += "    normquat = GetVertexQuaternion();\n";
         out += "    vec4 vtx_color = vec4(" + semantic(VSOutputAttributes::COLOR_R) + ", " +
@@ -1733,8 +1750,8 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
     return out;
 }
 
-static std::string GetGSCommonSource(const PicaGSConfigCommonRaw& config) {
-    std::string out = GetVertexInterfaceDeclaration(true);
+static std::string GetGSCommonSource(const PicaGSConfigCommonRaw& config, bool use_clip_planes) {
+    std::string out = GetVertexInterfaceDeclaration(true, use_clip_planes);
     out += UniformBlockDef;
     out += OpenGL::ShaderDecompiler::GetCommonDeclarations();
 
@@ -1773,12 +1790,14 @@ struct Vertex {
            semantic(VSOutputAttributes::POSITION_W) + ");\n";
     out += "    gl_Position = vtx_pos;\n";
     out += "    gl_Position.z = (gl_Position.z + gl_Position.w) / 2.0;\n";
-    out += "    gl_ClipDistance[0] = -vtx_pos.z;\n"; // fixed PICA clipping plane z <= 0
-    out += "    if (enable_clip1) {\n";
-    out += "        gl_ClipDistance[1] = dot(clip_coef, vtx_pos);\n";
-    out += "    } else {\n";
-    out += "        gl_ClipDistance[1] = 0;\n";
-    out += "    }\n\n";
+    if (use_clip_planes) {
+        out += "    gl_ClipDistance[0] = -vtx_pos.z;\n"; // fixed PICA clipping plane z <= 0
+        out += "    if (enable_clip1) {\n";
+        out += "        gl_ClipDistance[1] = dot(clip_coef, vtx_pos);\n";
+        out += "    } else {\n";
+        out += "        gl_ClipDistance[1] = 0;\n";
+        out += "    }\n\n";
+    }
 
     out += "    vec4 vtx_quat = GetVertexQuaternion(vtx);\n";
     out += "    normquat = mix(vtx_quat, -vtx_quat, bvec4(quats_opposite));\n\n";
@@ -1830,7 +1849,7 @@ layout(triangle_strip, max_vertices = 3) out;
 
 )";
 
-    out += GetGSCommonSource(config.state);
+    out += GetGSCommonSource(config.state, config.use_clip_planes);
 
     out += R"(
 void main() {

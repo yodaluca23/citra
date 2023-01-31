@@ -79,6 +79,11 @@ public:
         return False(state & flag);
     }
 
+    /// Returns the mutex used to synchronize queue access
+    [[nodiscard]] std::mutex& QueueMutex() noexcept {
+        return queue_mutex;
+    }
+
     /// Returns the current command buffer tick.
     [[nodiscard]] u64 CurrentTick() const noexcept {
         return master_semaphore.CurrentTick();
@@ -208,6 +213,7 @@ private:
     StateFlags state{};
     std::mutex reserve_mutex;
     std::mutex work_mutex;
+    std::mutex queue_mutex;
     std::condition_variable_any work_cv;
     std::condition_variable wait_cv;
     std::jthread worker_thread;

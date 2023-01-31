@@ -753,6 +753,13 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                                    depth_surface);
     }
 
+    static int counter = 20;
+    counter--;
+    if (counter == 0) {
+        scheduler.DispatchWork();
+        counter = 20;
+    }
+
     return succeeded;
 }
 

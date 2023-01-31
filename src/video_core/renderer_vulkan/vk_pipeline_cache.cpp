@@ -393,7 +393,8 @@ PipelineCache::PipelineCache(const Instance& instance, Scheduler& scheduler,
       desc_manager{desc_manager}, workers{std::max(std::thread::hardware_concurrency(), 2U) - 1,
                                           "Pipeline builder"},
       trivial_vertex_shader{instance, vk::ShaderStageFlagBits::eVertex,
-                            GenerateTrivialVertexShader()} {}
+                            GenerateTrivialVertexShader(instance.IsShaderClipDistanceSupported())} {
+}
 
 PipelineCache::~PipelineCache() {
     vk::Device device = instance.GetDevice();
@@ -508,7 +509,7 @@ bool PipelineCache::BindPipeline(const PipelineInfo& info, bool wait_built) {
 bool PipelineCache::UseProgrammableVertexShader(const Pica::Regs& regs,
                                                 Pica::Shader::ShaderSetup& setup,
                                                 const VertexLayout& layout) {
-    PicaVSConfig config{regs.rasterizer, regs.vs, setup};
+    PicaVSConfig config{regs.rasterizer, regs.vs, setup, instance};
     config.state.use_geometry_shader = instance.UseGeometryShaders();
 
     for (u32 i = 0; i < layout.attribute_count; i++) {
@@ -570,7 +571,7 @@ bool PipelineCache::UseFixedGeometryShader(const Pica::Regs& regs) {
         return true;
     }
 
-    const PicaFixedGSConfig gs_config{regs};
+    const PicaFixedGSConfig gs_config{regs, instance};
     auto [it, new_shader] = fixed_geometry_shaders.try_emplace(gs_config, instance);
     auto& shader = it->second;
 
@@ -605,17 +606,20 @@ void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
         const bool emit_spirv = Settings::values.spirv_shader_gen.GetValue();
         const vk::Device device = instance.GetDevice();
 
-        workers.QueueWork([config, device, emit_spirv, &shader]() {
-            if (emit_spirv) {
-                const std::vector code = GenerateFragmentShaderSPV(config);
-                shader.module = CompileSPV(code, device);
-            } else {
+        // When using SPIR-V emit the fragment shader on the main thread
+        // since it's quite fast. This also heavily reduces flicker
+        if (emit_spirv) {
+            const std::vector code = GenerateFragmentShaderSPV(config);
+            shader.module = CompileSPV(code, device);
+            shader.MarkBuilt();
+        } else {
+            workers.QueueWork([config, device, &shader]() {
                 const std::string code = GenerateFragmentShader(config);
                 shader.module = Compile(code, vk::ShaderStageFlagBits::eFragment, device,
                                         ShaderOptimization::High);
-            }
-            shader.MarkBuilt();
-        });
+                shader.MarkBuilt();
+            });
+        }
     }
 
     current_shaders[ProgramType::FS] = &shader;

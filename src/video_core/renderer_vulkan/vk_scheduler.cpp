@@ -154,8 +154,8 @@ void Scheduler::SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wa
             };
 
             try {
-                vk::Queue queue = instance.GetGraphicsQueue();
-                queue.submit(submit_info);
+                std::scoped_lock lock{queue_mutex};
+                instance.GetGraphicsQueue().submit(submit_info);
             } catch (vk::DeviceLostError& err) {
                 LOG_CRITICAL(Render_Vulkan, "Device lost during submit: {}", err.what());
                 UNREACHABLE();

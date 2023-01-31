@@ -312,9 +312,23 @@ private:
 
 class VulkanRenderWidget : public RenderWidget {
 public:
-    explicit VulkanRenderWidget(GRenderWindow* parent) : RenderWidget(parent) {
+    explicit VulkanRenderWidget(GRenderWindow* parent, bool is_secondary)
+        : RenderWidget(parent), is_secondary(is_secondary) {
         windowHandle()->setSurfaceType(QWindow::VulkanSurface);
     }
+
+    void Present() override {
+        if (!isVisible()) {
+            return;
+        }
+        if (!Core::System::GetInstance().IsPoweredOn()) {
+            return;
+        }
+        VideoCore::g_renderer->TryPresent(100, is_secondary);
+    }
+
+private:
+    bool is_secondary;
 };
 
 static Frontend::WindowSystemType GetWindowSystemType() {
@@ -656,7 +670,7 @@ bool GRenderWindow::InitializeOpenGL() {
 }
 
 bool GRenderWindow::InitializeVulkan() {
-    auto child = new VulkanRenderWidget(this);
+    auto child = new VulkanRenderWidget(this, is_secondary);
     child_widget = child;
     child_widget->windowHandle()->create();
     main_context = std::make_unique<DummyContext>();

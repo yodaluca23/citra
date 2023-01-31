@@ -21,6 +21,7 @@ Swapchain::Swapchain(const Instance& instance, Scheduler& scheduler,
     FindPresentFormat();
     SetPresentMode();
     renderpass_cache.CreatePresentRenderpass(surface_format.format);
+    Create();
 }
 
 Swapchain::~Swapchain() {
@@ -29,7 +30,6 @@ Swapchain::~Swapchain() {
 }
 
 void Swapchain::Create(vk::SurfaceKHR new_surface) {
-    scheduler.Finish();
     Destroy();
 
     if (new_surface) {
@@ -55,8 +55,8 @@ void Swapchain::Create(vk::SurfaceKHR new_surface) {
         .imageColorSpace = surface_format.colorSpace,
         .imageExtent = extent,
         .imageArrayLayers = 1,
-        .imageUsage =
-            vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc,
+        .imageUsage = vk::ImageUsageFlagBits::eColorAttachment |
+                      vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst,
         .imageSharingMode = sharing_mode,
         .queueFamilyIndexCount = queue_family_indices_count,
         .pQueueFamilyIndices = queue_family_indices.data(),
@@ -76,15 +76,11 @@ void Swapchain::Create(vk::SurfaceKHR new_surface) {
 
     SetupImages();
     RefreshSemaphores();
-    resource_ticks.clear();
-    resource_ticks.resize(image_count);
-
-    is_outdated = false;
-    is_suboptimal = false;
+    needs_recreation = false;
 }
 
 MICROPROFILE_DEFINE(Vulkan_Acquire, "Vulkan", "Swapchain Acquire", MP_RGB(185, 66, 245));
-void Swapchain::AcquireNextImage() {
+bool Swapchain::AcquireNextImage() {
     MICROPROFILE_SCOPE(Vulkan_Acquire);
     vk::Device device = instance.GetDevice();
     vk::Result result =
@@ -95,46 +91,43 @@ void Swapchain::AcquireNextImage() {
     case vk::Result::eSuccess:
         break;
     case vk::Result::eSuboptimalKHR:
-        is_suboptimal = true;
+        needs_recreation = true;
         break;
     case vk::Result::eErrorOutOfDateKHR:
-        is_outdated = true;
+        needs_recreation = true;
         break;
     default:
         ASSERT_MSG(false, "vkAcquireNextImageKHR returned unknown result {}", result);
         break;
     }
 
-    scheduler.Wait(resource_ticks[image_index]);
-    resource_ticks[image_index] = scheduler.CurrentTick();
+    return !needs_recreation;
 }
 
 MICROPROFILE_DEFINE(Vulkan_Present, "Vulkan", "Swapchain Present", MP_RGB(66, 185, 245));
 void Swapchain::Present() {
-    scheduler.Record([this, index = image_index](vk::CommandBuffer) {
-        if (NeedsRecreation()) [[unlikely]] {
-            return;
-        }
+    if (needs_recreation) {
+        return;
+    }
 
-        const vk::PresentInfoKHR present_info = {
-            .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &present_ready[index],
-            .swapchainCount = 1,
-            .pSwapchains = &swapchain,
-            .pImageIndices = &index,
-        };
+    const vk::PresentInfoKHR present_info = {
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &present_ready[image_index],
+        .swapchainCount = 1,
+        .pSwapchains = &swapchain,
+        .pImageIndices = &image_index,
+    };
 
-        MICROPROFILE_SCOPE(Vulkan_Present);
-        vk::Queue present_queue = instance.GetPresentQueue();
-        try {
-            [[maybe_unused]] vk::Result result = present_queue.presentKHR(present_info);
-        } catch (vk::OutOfDateKHRError&) {
-            is_outdated = true;
-        } catch (...) {
-            LOG_CRITICAL(Render_Vulkan, "Swapchain presentation failed");
-            UNREACHABLE();
-        }
-    });
+    MICROPROFILE_SCOPE(Vulkan_Present);
+    try {
+        std::scoped_lock lock{scheduler.QueueMutex()};
+        [[maybe_unused]] vk::Result result = instance.GetPresentQueue().presentKHR(present_info);
+    } catch (vk::OutOfDateKHRError&) {
+        needs_recreation = true;
+    } catch (const vk::SystemError& err) {
+        LOG_CRITICAL(Render_Vulkan, "Swapchain presentation failed {}", err.what());
+        UNREACHABLE();
+    }
 
     frame_index = (frame_index + 1) % image_count;
 }
@@ -230,23 +223,16 @@ void Swapchain::Destroy() {
     if (swapchain) {
         device.destroySwapchainKHR(swapchain);
     }
-    for (const vk::ImageView view : image_views) {
-        device.destroyImageView(view);
-    }
-    for (const vk::Framebuffer framebuffer : framebuffers) {
-        device.destroyFramebuffer(framebuffer);
-    }
-    for (const vk::Semaphore semaphore : image_acquired) {
-        device.destroySemaphore(semaphore);
-    }
-    for (const vk::Semaphore semaphore : present_ready) {
-        device.destroySemaphore(semaphore);
-    }
 
-    framebuffers.clear();
-    image_views.clear();
-    image_acquired.clear();
-    present_ready.clear();
+    const auto Clear = [&](auto& vec) {
+        for (const auto item : vec) {
+            device.destroy(item);
+        }
+        vec.clear();
+    };
+
+    Clear(image_acquired);
+    Clear(present_ready);
 }
 
 void Swapchain::RefreshSemaphores() {
@@ -267,34 +253,6 @@ void Swapchain::SetupImages() {
     images = device.getSwapchainImagesKHR(swapchain);
     image_count = static_cast<u32>(images.size());
     LOG_INFO(Render_Vulkan, "Using {} images", image_count);
-
-    for (const vk::Image image : images) {
-        const vk::ImageViewCreateInfo view_info = {
-            .image = image,
-            .viewType = vk::ImageViewType::e2D,
-            .format = surface_format.format,
-            .subresourceRange{
-                .aspectMask = vk::ImageAspectFlagBits::eColor,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            },
-        };
-
-        image_views.push_back(device.createImageView(view_info));
-
-        const vk::FramebufferCreateInfo framebuffer_info = {
-            .renderPass = renderpass_cache.GetPresentRenderpass(),
-            .attachmentCount = 1,
-            .pAttachments = &image_views.back(),
-            .width = extent.width,
-            .height = extent.height,
-            .layers = 1,
-        };
-
-        framebuffers.push_back(device.createFramebuffer(framebuffer_info));
-    }
 }
 
 } // namespace Vulkan

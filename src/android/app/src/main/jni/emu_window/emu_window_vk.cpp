@@ -58,4 +58,8 @@ void EmuWindow_Android_Vulkan::TryPresenting() {
             return;
         }
     }
+
+    if (VideoCore::g_renderer) {
+        VideoCore::g_renderer->TryPresent(0);
+    }
 }

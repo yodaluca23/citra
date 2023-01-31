@@ -5,6 +5,8 @@
 #pragma once
 
 #include <array>
+#include <condition_variable>
+#include <mutex>
 #include <glm/glm.hpp>
 #include "common/common_types.h"
 #include "common/math_util.h"
@@ -27,7 +29,6 @@ struct FramebufferLayout;
 
 namespace Vulkan {
 
-/// Structure used for storing information about the textures for each 3DS screen
 struct TextureInfo {
     ImageAlloc alloc;
     u32 width;
@@ -35,7 +36,6 @@ struct TextureInfo {
     GPU::Regs::PixelFormat format;
 };
 
-/// Structure used for storing information about the display target for each 3DS screen
 struct ScreenInfo {
     ImageAlloc* display_texture = nullptr;
     Common::Rectangle<float> display_texcoords;
@@ -43,7 +43,6 @@ struct ScreenInfo {
     vk::Sampler sampler;
 };
 
-// Uniform data used for presenting the 3DS screens
 struct PresentUniformData {
     glm::mat4 modelview;
     Common::Vec4f i_resolution;
@@ -52,11 +51,6 @@ struct PresentUniformData {
     int screen_id_r = 0;
     int layer = 0;
     int reverse_interlaced = 0;
-
-    // Returns an immutable byte view of the uniform data
-    auto AsBytes() const {
-        return std::as_bytes(std::span{this, 1});
-    }
 };
 
 static_assert(sizeof(PresentUniformData) < 256, "PresentUniformData must be below 256 bytes!");
@@ -75,7 +69,7 @@ public:
     void ShutDown() override;
     void SwapBuffers() override;
     void NotifySurfaceChanged() override;
-    void TryPresent(int timeout_ms, bool is_secondary) override {}
+    void TryPresent(int timeout_ms, bool is_secondary) override;
     void PrepareVideoDumping() override {}
     void CleanupVideoDumping() override {}
     void Sync() override;
@@ -92,6 +86,8 @@ private:
     void ConfigureRenderPipeline();
     void PrepareRendertarget();
     void RenderScreenshot();
+    void RenderToMailbox(const Layout::FramebufferLayout& layout,
+                         std::unique_ptr<Frontend::TextureMailbox>& mailbox, bool flipped);
     void BeginRendering();
 
     void DrawScreens(const Layout::FramebufferLayout& layout, bool flipped);
@@ -121,6 +117,8 @@ private:
     Swapchain swapchain;
     StreamBuffer vertex_buffer;
     RasterizerVulkan rasterizer;
+    std::mutex swapchain_mutex;
+    std::condition_variable swapchain_cv;
 
     // Present pipelines (Normal, Anaglyph, Interlaced)
     vk::PipelineLayout present_pipeline_layout;
@@ -134,7 +132,7 @@ private:
     u32 current_pipeline = 0;
     u32 current_sampler = 0;
 
-    /// Display information for top and bottom screens respectively
+    // Display information for top and bottom screens respectively
     std::array<ScreenInfo, 3> screen_infos{};
     PresentUniformData draw_info{};
     vk::ClearColorValue clear_color{};

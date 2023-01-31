@@ -37,24 +37,9 @@ public:
     virtual ~TextureMailbox() = default;
 
     /**
-     * Recreate the render objects attached to this frame with the new specified width/height
-     */
-    virtual void ReloadRenderFrame(Frontend::Frame* frame, u32 width, u32 height) = 0;
-
-    /**
-     * Recreate the presentation objects attached to this frame with the new specified width/height
-     */
-    virtual void ReloadPresentFrame(Frontend::Frame* frame, u32 width, u32 height) = 0;
-
-    /**
      * Render thread calls this to get an available frame to present
      */
     virtual Frontend::Frame* GetRenderFrame() = 0;
-
-    /**
-     * Render thread calls this after draw commands are done to add to the presentation mailbox
-     */
-    virtual void ReleaseRenderFrame(Frame* frame) = 0;
 
     /**
      * Presentation thread calls this to get the latest frame available to present. If there is no
@@ -62,6 +47,26 @@ public:
      * returns nullptr
      */
     virtual Frontend::Frame* TryGetPresentFrame(int timeout_ms) = 0;
+
+    /**
+     * Recreate the render objects attached to this frame with the new specified width/height
+     */
+    virtual void ReloadRenderFrame(Frontend::Frame* frame, u32 width, u32 height) {}
+
+    /**
+     * Recreate the presentation objects attached to this frame with the new specified width/height
+     */
+    virtual void ReloadPresentFrame(Frontend::Frame* frame, u32 width, u32 height) {}
+
+    /**
+     * Render thread calls this after draw commands are done to add to the presentation mailbox
+     */
+    virtual void ReleaseRenderFrame(Frame* frame) {}
+
+    /**
+     * Presentation thread calls this after presentation to free the render frame
+     */
+    virtual void ReleasePresentFrame(Frame* frame) {}
 };
 
 /**

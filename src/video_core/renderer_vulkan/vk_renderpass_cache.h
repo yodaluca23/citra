@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include <cstring>
 #include <compare>
+#include <cstring>
 #include <variant>
 #include "common/hash.h"
 #include "video_core/rasterizer_cache/pixel_format.h"

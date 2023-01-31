@@ -212,7 +212,7 @@ void RenderpassCache::CreatePresentRenderpass(vk::Format format) {
     if (!present_renderpass) {
         present_renderpass =
             CreateRenderPass(format, vk::Format::eUndefined, vk::AttachmentLoadOp::eClear,
-                             vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR);
+                             vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferSrcOptimal);
     }
 }
 
