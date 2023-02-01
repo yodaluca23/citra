@@ -1019,6 +1019,11 @@ bool GMainWindow::LoadROM(const QString& filename) {
                    "titles</a>."));
             break;
 
+        case Core::System::ResultStatus::ErrorLoader_ErrorGbaTitle:
+            QMessageBox::critical(this, tr("Unsupported ROM"),
+                                  tr("GBA Virtual Console ROMs are not supported by Citra."));
+            break;
+
         case Core::System::ResultStatus::ErrorVideoCore:
             QMessageBox::critical(
                 this, tr("Video Core Error"),
@@ -2659,6 +2664,10 @@ int main(int argc, char* argv[]) {
 #ifdef __APPLE__
     std::string bin_path = FileUtil::GetBundleDirectory() + DIR_SEP + "..";
     chdir(bin_path.c_str());
+#endif
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    // Disables the "?" button on all dialogs. Disabled by default on Qt6.
+    QCoreApplication::setAttribute(Qt::AA_DisableWindowContextHelpButton);
 #endif
     QCoreApplication::setAttribute(Qt::AA_DontCheckOpenGLContextThreadAffinity);
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
