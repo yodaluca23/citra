@@ -162,7 +162,6 @@ private:
 
 class Surface : public VideoCore::SurfaceBase<Surface> {
     friend class TextureRuntime;
-    friend class RasterizerVulkan;
 
 public:
     Surface(TextureRuntime& runtime);
@@ -186,29 +185,39 @@ public:
     /// Returns the pipeline stage flags indicative of the surface
     vk::PipelineStageFlags PipelineStageFlags() const noexcept;
 
+    /// Returns the surface aspect
+    vk::ImageAspectFlags Aspect() const noexcept {
+        return alloc.aspect;
+    }
+
+    /// Returns the surface image handle
+    vk::Image Image() const noexcept {
+        return alloc.image;
+    }
+
     /// Returns an image view used to sample the surface from a shader
-    vk::ImageView GetImageView() const noexcept {
+    vk::ImageView ImageView() const noexcept {
         return alloc.image_view;
     }
 
     /// Returns an image view used to create a framebuffer
-    vk::ImageView GetFramebufferView() noexcept {
+    vk::ImageView FramebufferView() noexcept {
         is_framebuffer = true;
         return alloc.base_view;
     }
 
     /// Returns the depth only image view of the surface, null otherwise
-    vk::ImageView GetDepthView() const noexcept {
+    vk::ImageView DepthView() const noexcept {
         return alloc.depth_view;
     }
 
     /// Returns the stencil only image view of the surface, null otherwise
-    vk::ImageView GetStencilView() const noexcept {
+    vk::ImageView StencilView() const noexcept {
         return alloc.stencil_view;
     }
 
     /// Returns the R32 image view used for atomic load/store
-    vk::ImageView GetStorageView() noexcept {
+    vk::ImageView StorageView() noexcept {
         if (!alloc.storage_view) {
             LOG_CRITICAL(Render_Vulkan,
                          "Surface with pixel format {} and internal format {} "
@@ -218,11 +227,6 @@ public:
         }
         is_storage = true;
         return alloc.storage_view;
-    }
-
-    /// Returns the internal format of the allocated texture
-    vk::Format GetInternalFormat() const noexcept {
-        return alloc.format;
     }
 
 private:
@@ -240,12 +244,10 @@ private:
     TextureRuntime& runtime;
     const Instance& instance;
     Scheduler& scheduler;
-
-public:
-    bool is_framebuffer{};
-    bool is_storage{};
     ImageAlloc alloc;
     FormatTraits traits;
+    bool is_framebuffer{};
+    bool is_storage{};
 };
 
 struct Traits {

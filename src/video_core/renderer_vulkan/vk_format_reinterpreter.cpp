@@ -147,15 +147,15 @@ void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surf
                                VideoCore::Rect2D dst_rect) {
     const std::array textures = {
         vk::DescriptorImageInfo{
-            .imageView = source.GetDepthView(),
+            .imageView = source.DepthView(),
             .imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal,
         },
         vk::DescriptorImageInfo{
-            .imageView = source.GetStencilView(),
+            .imageView = source.StencilView(),
             .imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal,
         },
         vk::DescriptorImageInfo{
-            .imageView = dest.GetImageView(),
+            .imageView = dest.ImageView(),
             .imageLayout = vk::ImageLayout::eGeneral,
         },
     };
@@ -164,8 +164,8 @@ void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surf
     device.updateDescriptorSetWithTemplate(set, update_template, textures[0]);
 
     runtime.GetRenderpassCache().ExitRenderpass();
-    scheduler.Record([this, set, src_rect, src_image = source.alloc.image,
-                      dst_image = dest.alloc.image](vk::CommandBuffer cmdbuf) {
+    scheduler.Record([this, set, src_rect, src_image = source.Image(),
+                      dst_image = dest.Image()](vk::CommandBuffer cmdbuf) {
         const std::array pre_barriers = {
             vk::ImageMemoryBarrier{
                 .srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite,

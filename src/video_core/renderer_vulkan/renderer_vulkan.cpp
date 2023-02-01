@@ -28,7 +28,6 @@
 #include <vk_mem_alloc.h>
 
 MICROPROFILE_DEFINE(Vulkan_RenderFrame, "Vulkan", "Render Frame", MP_RGB(128, 128, 64));
-MICROPROFILE_DEFINE(Vulkan_WaitPresent, "Vulkan", "Wait For Present", MP_RGB(128, 128, 128));
 MICROPROFILE_DEFINE(Vulkan_SwapchainCopy, "Vulkan", "Swapchain Copy", MP_RGB(64, 64, 0));
 
 namespace Vulkan {
@@ -195,72 +194,57 @@ void RendererVulkan::PrepareRendertarget() {
 void RendererVulkan::RenderToMailbox(const Layout::FramebufferLayout& layout,
                                      std::unique_ptr<Frontend::TextureMailbox>& mailbox,
                                      bool flipped) {
-    const vk::Device device = instance.GetDevice();
-    Frontend::Frame* frame;
-    {
-        MICROPROFILE_SCOPE(Vulkan_WaitPresent);
-        frame = mailbox->GetRenderFrame();
+    Frontend::Frame* frame = mailbox->GetRenderFrame();
+    MICROPROFILE_SCOPE(Vulkan_RenderFrame);
 
-        std::scoped_lock lock{frame->fence_mutex};
-        [[maybe_unused]] vk::Result result =
-            device.waitForFences(frame->present_done, false, std::numeric_limits<u64>::max());
-        device.resetFences(frame->present_done);
+    const auto [width, height] = swapchain.GetExtent();
+    if (width != frame->width || height != frame->height) {
+        mailbox->ReloadRenderFrame(frame, width, height);
     }
 
-    {
-        MICROPROFILE_SCOPE(Vulkan_RenderFrame);
+    scheduler.Record([layout](vk::CommandBuffer cmdbuf) {
+        const vk::Viewport viewport = {
+            .x = 0.0f,
+            .y = 0.0f,
+            .width = static_cast<float>(layout.width),
+            .height = static_cast<float>(layout.height),
+            .minDepth = 0.0f,
+            .maxDepth = 1.0f,
+        };
 
-        const auto [width, height] = swapchain.GetExtent();
-        if (width != frame->width || height != frame->height) {
-            mailbox->ReloadRenderFrame(frame, width, height);
-        }
+        const vk::Rect2D scissor = {
+            .offset = {0, 0},
+            .extent = {layout.width, layout.height},
+        };
 
-        scheduler.Record([layout](vk::CommandBuffer cmdbuf) {
-            const vk::Viewport viewport = {
-                .x = 0.0f,
-                .y = 0.0f,
-                .width = static_cast<float>(layout.width),
-                .height = static_cast<float>(layout.height),
-                .minDepth = 0.0f,
-                .maxDepth = 1.0f,
-            };
+        cmdbuf.setViewport(0, viewport);
+        cmdbuf.setScissor(0, scissor);
+    });
 
-            const vk::Rect2D scissor = {
-                .offset = {0, 0},
-                .extent = {layout.width, layout.height},
-            };
+    renderpass_cache.ExitRenderpass();
+    scheduler.Record([this, framebuffer = frame->framebuffer, width = frame->width,
+                      height = frame->height](vk::CommandBuffer cmdbuf) {
+        const vk::ClearValue clear{.color = clear_color};
+        const vk::RenderPassBeginInfo renderpass_begin_info = {
+            .renderPass = renderpass_cache.GetPresentRenderpass(),
+            .framebuffer = framebuffer,
+            .renderArea =
+                vk::Rect2D{
+                    .offset = {0, 0},
+                    .extent = {width, height},
+                },
+            .clearValueCount = 1,
+            .pClearValues = &clear,
+        };
 
-            cmdbuf.setViewport(0, viewport);
-            cmdbuf.setScissor(0, scissor);
-        });
+        cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
+    });
 
-        renderpass_cache.ExitRenderpass();
+    DrawScreens(layout, flipped);
 
-        scheduler.Record([this, framebuffer = frame->framebuffer, width = frame->width,
-                          height = frame->height](vk::CommandBuffer cmdbuf) {
-            const vk::ClearValue clear{.color = clear_color};
-            const vk::RenderPassBeginInfo renderpass_begin_info = {
-                .renderPass = renderpass_cache.GetPresentRenderpass(),
-                .framebuffer = framebuffer,
-                .renderArea =
-                    vk::Rect2D{
-                        .offset = {0, 0},
-                        .extent = {width, height},
-                    },
-                .clearValueCount = 1,
-                .pClearValues = &clear,
-            };
-
-            cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
-        });
-
-        DrawScreens(layout, flipped);
-
-        scheduler.Flush(frame->render_ready);
-        scheduler.Record(
-            [&mailbox, frame](vk::CommandBuffer) { mailbox->ReleaseRenderFrame(frame); });
-        scheduler.DispatchWork();
-    }
+    scheduler.Flush(frame->render_ready);
+    scheduler.Record([&mailbox, frame](vk::CommandBuffer) { mailbox->ReleaseRenderFrame(frame); });
+    scheduler.DispatchWork();
 }
 
 void RendererVulkan::BeginRendering() {
@@ -1100,7 +1084,7 @@ void RendererVulkan::TryPresent(int timeout_ms, bool is_secondary) {
         cmdbuf.end();
 
         static constexpr std::array<vk::PipelineStageFlags, 2> wait_stage_masks = {
-            vk::PipelineStageFlagBits::eColorAttachmentOutput,
+            vk::PipelineStageFlagBits::eAllCommands,
             vk::PipelineStageFlagBits::eAllCommands,
         };
 

@@ -48,6 +48,7 @@ void RenderpassCache::EnterRenderpass(Surface* const color, Surface* const depth
     u32 height = UINT32_MAX;
     u32 cursor = 0;
     std::array<VideoCore::PixelFormat, 2> formats{};
+    std::array<vk::Image, 2> images{};
     std::array<vk::ImageView, 2> views{};
 
     const auto Prepare = [&](Surface* const surface) {
@@ -59,11 +60,36 @@ void RenderpassCache::EnterRenderpass(Surface* const color, Surface* const depth
         width = std::min(width, surface->GetScaledWidth());
         height = std::min(height, surface->GetScaledHeight());
         formats[cursor] = surface->pixel_format;
-        views[cursor++] = surface->GetFramebufferView();
+        images[cursor] = surface->Image();
+        views[cursor++] = surface->FramebufferView();
     };
 
     Prepare(color);
     Prepare(depth_stencil);
+
+    const RenderingInfo new_info = {
+        .color =
+            RenderTarget{
+                .aspect = vk::ImageAspectFlagBits::eColor,
+                .image = images[0],
+                .image_view = views[0],
+            },
+        .depth =
+            RenderTarget{
+                .aspect = depth_stencil ? depth_stencil->Aspect() : vk::ImageAspectFlagBits::eDepth,
+                .image = images[1],
+                .image_view = views[1],
+            },
+        .render_area = render_area,
+        .clear = clear,
+        .do_clear = do_clear,
+    };
+
+    const bool is_dirty = scheduler.IsStateDirty(StateFlags::Renderpass);
+    if (info == new_info && rendering && !is_dirty) {
+        cmd_count++;
+        return;
+    }
 
     const vk::RenderPass renderpass = GetRenderpass(formats[0], formats[1], do_clear);
 
@@ -79,38 +105,24 @@ void RenderpassCache::EnterRenderpass(Surface* const color, Surface* const depth
         it->second = CreateFramebuffer(framebuffer_info, renderpass);
     }
 
-    const RenderpassState new_state = {
-        .renderpass = renderpass,
-        .framebuffer = it->second,
-        .render_area = render_area,
-        .clear = clear,
-    };
-
-    const u64 new_state_hash = Common::ComputeStructHash64(new_state);
-    const bool is_dirty = scheduler.IsStateDirty(StateFlags::Renderpass);
-    if (state_hash == new_state_hash && rendering && !is_dirty) {
-        cmd_count++;
-        return;
-    }
-
     if (rendering) {
         ExitRenderpass();
     }
+    scheduler.Record(
+        [render_area, clear, renderpass, framebuffer = it->second](vk::CommandBuffer cmdbuf) {
+            const vk::RenderPassBeginInfo renderpass_begin_info = {
+                .renderPass = renderpass,
+                .framebuffer = framebuffer,
+                .renderArea = render_area,
+                .clearValueCount = 1,
+                .pClearValues = &clear,
+            };
 
-    scheduler.Record([new_state](vk::CommandBuffer cmdbuf) {
-        const vk::RenderPassBeginInfo renderpass_begin_info = {
-            .renderPass = new_state.renderpass,
-            .framebuffer = new_state.framebuffer,
-            .renderArea = new_state.render_area,
-            .clearValueCount = 1,
-            .pClearValues = &new_state.clear,
-        };
-
-        cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
-    });
+            cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
+        });
 
     scheduler.MarkStateNonDirty(StateFlags::Renderpass);
-    state_hash = new_state_hash;
+    info = new_info;
     rendering = true;
 }
 
@@ -120,13 +132,65 @@ void RenderpassCache::ExitRenderpass() {
     }
 
     rendering = false;
-    scheduler.Record([dynamic_rendering = dynamic_rendering](vk::CommandBuffer cmdbuf) {
-        if (dynamic_rendering) {
-            cmdbuf.endRenderingKHR();
-        } else {
-            cmdbuf.endRenderPass();
-        }
-    });
+    scheduler.Record(
+        [info = info, dynamic_rendering = dynamic_rendering](vk::CommandBuffer cmdbuf) {
+            u32 num_barriers = 0;
+            std::array<vk::ImageMemoryBarrier, 2> barriers;
+            vk::PipelineStageFlags src_stage{};
+            vk::PipelineStageFlags dst_stage{};
+
+            if (info.color) {
+                barriers[num_barriers++] = vk::ImageMemoryBarrier{
+                    .srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite,
+                    .dstAccessMask = vk::AccessFlagBits::eShaderRead,
+                    .oldLayout = vk::ImageLayout::eGeneral,
+                    .newLayout = vk::ImageLayout::eGeneral,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .image = info.color.image,
+                    .subresourceRange{
+                        .aspectMask = vk::ImageAspectFlagBits::eColor,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                    },
+                };
+
+                src_stage |= vk::PipelineStageFlagBits::eColorAttachmentOutput;
+                dst_stage |= vk::PipelineStageFlagBits::eFragmentShader;
+            }
+            if (info.depth) {
+                barriers[num_barriers++] = vk::ImageMemoryBarrier{
+                    .srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite,
+                    .dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
+                                     vk::AccessFlagBits::eDepthStencilAttachmentWrite,
+                    .oldLayout = vk::ImageLayout::eGeneral,
+                    .newLayout = vk::ImageLayout::eGeneral,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .image = info.depth.image,
+                    .subresourceRange{
+                        .aspectMask = info.depth.aspect,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                    },
+                };
+
+                src_stage |= vk::PipelineStageFlagBits::eEarlyFragmentTests |
+                             vk::PipelineStageFlagBits::eLateFragmentTests;
+                dst_stage |= vk::PipelineStageFlagBits::eLateFragmentTests;
+            }
+            if (dynamic_rendering) {
+                cmdbuf.endRenderingKHR();
+            } else {
+                cmdbuf.endRenderPass();
+            }
+            cmdbuf.pipelineBarrier(src_stage, dst_stage, vk::DependencyFlagBits::eByRegion, 0,
+                                   nullptr, 0, nullptr, num_barriers, barriers.data());
+        });
 
     // The Mali guide recommends flushing at the end of each major renderpass
     // Testing has shown this has a significant effect on rendering performance
@@ -138,33 +202,40 @@ void RenderpassCache::ExitRenderpass() {
 
 void RenderpassCache::BeginRendering(Surface* const color, Surface* const depth_stencil,
                                      vk::Rect2D render_area, bool do_clear, vk::ClearValue clear) {
-    RenderingState new_state = {
+    RenderingInfo new_info = {
         .render_area = render_area,
         .clear = clear,
         .do_clear = do_clear,
     };
 
     if (color) {
-        new_state.color_view = color->GetFramebufferView();
+        new_info.color = RenderTarget{
+            .aspect = vk::ImageAspectFlagBits::eColor,
+            .image = color->Image(),
+            .image_view = color->FramebufferView(),
+        };
     }
     if (depth_stencil) {
-        new_state.depth_view = depth_stencil->GetFramebufferView();
+        new_info.depth = RenderTarget{
+            .aspect = depth_stencil->Aspect(),
+            .image = depth_stencil->Image(),
+            .image_view = depth_stencil->FramebufferView(),
+        };
     }
 
-    const u64 new_state_hash = Common::ComputeStructHash64(new_state);
     const bool is_dirty = scheduler.IsStateDirty(StateFlags::Renderpass);
-    if (state_hash == new_state_hash && rendering && !is_dirty) {
+    if (info == new_info && rendering && !is_dirty) {
         cmd_count++;
         return;
     }
 
+    const bool has_stencil =
+        depth_stencil && depth_stencil->type == VideoCore::SurfaceType::DepthStencil;
+
     if (rendering) {
         ExitRenderpass();
     }
-
-    const bool has_stencil =
-        depth_stencil && depth_stencil->type == VideoCore::SurfaceType::DepthStencil;
-    scheduler.Record([new_state, has_stencil](vk::CommandBuffer cmdbuf) {
+    scheduler.Record([new_info, has_stencil](vk::CommandBuffer cmdbuf) {
         u32 cursor = 0;
         std::array<vk::RenderingAttachmentInfoKHR, 2> infos{};
 
@@ -178,21 +249,20 @@ void RenderpassCache::BeginRendering(Surface* const color, Surface* const depth_
                 .imageView = image_view,
                 .imageLayout = vk::ImageLayout::eGeneral,
                 .loadOp =
-                    new_state.do_clear ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad,
+                    new_info.do_clear ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad,
                 .storeOp = vk::AttachmentStoreOp::eStore,
-                .clearValue = new_state.clear,
+                .clearValue = new_info.clear,
             };
         };
 
-        Prepare(new_state.color_view);
-        Prepare(new_state.depth_view);
+        Prepare(new_info.color.image_view);
+        Prepare(new_info.depth.image_view);
 
-        const u32 color_attachment_count = new_state.color_view ? 1u : 0u;
-        const vk::RenderingAttachmentInfoKHR* depth_info =
-            new_state.depth_view ? &infos[1] : nullptr;
+        const u32 color_attachment_count = new_info.color ? 1u : 0u;
+        const vk::RenderingAttachmentInfoKHR* depth_info = new_info.depth ? &infos[1] : nullptr;
         const vk::RenderingAttachmentInfoKHR* stencil_info = has_stencil ? &infos[1] : nullptr;
         const vk::RenderingInfoKHR rendering_info = {
-            .renderArea = new_state.render_area,
+            .renderArea = new_info.render_area,
             .layerCount = 1,
             .colorAttachmentCount = color_attachment_count,
             .pColorAttachments = &infos[0],
@@ -204,7 +274,7 @@ void RenderpassCache::BeginRendering(Surface* const color, Surface* const depth_
     });
 
     scheduler.MarkStateNonDirty(StateFlags::Renderpass);
-    state_hash = new_state_hash;
+    info = new_info;
     rendering = true;
 }
 

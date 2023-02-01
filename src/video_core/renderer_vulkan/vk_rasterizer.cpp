@@ -123,12 +123,12 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
     pipeline_cache.BindTexelBuffer(4, texture_rgba_view);
 
     for (u32 i = 0; i < 4; i++) {
-        pipeline_cache.BindTexture(i, null_surface.GetImageView());
+        pipeline_cache.BindTexture(i, null_surface.ImageView());
         pipeline_cache.BindSampler(i, default_sampler);
     }
 
     for (u32 i = 0; i < 7; i++) {
-        pipeline_cache.BindStorageImage(i, null_storage_surface.GetImageView());
+        pipeline_cache.BindStorageImage(i, null_storage_surface.ImageView());
     }
 
     // Explicitly call the derived version to avoid warnings about calling virtual
@@ -542,9 +542,9 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
         const u32 binding = static_cast<u32>(face);
         if (surface) {
-            pipeline_cache.BindStorageImage(binding, surface->GetImageView());
+            pipeline_cache.BindStorageImage(binding, surface->ImageView());
         } else {
-            pipeline_cache.BindStorageImage(binding, null_storage_surface.GetImageView());
+            pipeline_cache.BindStorageImage(binding, null_storage_surface.ImageView());
         }
     };
 
@@ -585,9 +585,9 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                 case TextureType::Shadow2D: {
                     auto surface = res_cache.GetTextureSurface(texture);
                     if (surface) {
-                        pipeline_cache.BindStorageImage(0, surface->GetStorageView());
+                        pipeline_cache.BindStorageImage(0, surface->StorageView());
                     } else {
-                        pipeline_cache.BindStorageImage(0, null_storage_surface.GetImageView());
+                        pipeline_cache.BindStorageImage(0, null_storage_surface.ImageView());
                     }
                     continue;
                 }
@@ -617,9 +617,9 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
                     auto surface = res_cache.GetTextureCube(config);
                     if (surface) {
-                        pipeline_cache.BindTexture(3, surface->GetImageView());
+                        pipeline_cache.BindTexture(3, surface->ImageView());
                     } else {
-                        pipeline_cache.BindTexture(3, null_surface.GetImageView());
+                        pipeline_cache.BindTexture(3, null_surface.ImageView());
                     }
 
                     BindSampler(3, texture_cube_sampler, texture.config);
@@ -635,7 +635,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
             auto surface = res_cache.GetTextureSurface(texture);
             if (surface) {
-                if (color_surface && color_surface->GetImageView() == surface->GetImageView()) {
+                if (color_surface && color_surface->ImageView() == surface->ImageView()) {
                     Surface temp{*color_surface, runtime};
                     const VideoCore::TextureCopy copy = {
                         .src_level = 0,
@@ -647,9 +647,9 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                         .extent = VideoCore::Extent{temp.GetScaledWidth(), temp.GetScaledHeight()}};
 
                     runtime.CopyTextures(*color_surface, temp, copy);
-                    pipeline_cache.BindTexture(texture_index, temp.GetImageView());
+                    pipeline_cache.BindTexture(texture_index, temp.ImageView());
                 } else {
-                    pipeline_cache.BindTexture(texture_index, surface->GetImageView());
+                    pipeline_cache.BindTexture(texture_index, surface->ImageView());
                 }
 
             } else {
@@ -660,10 +660,10 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                 // the geometry in question.
                 // For example: a bug in Pokemon X/Y causes NULL-texture squares to be drawn
                 // on the male character's face, which in the OpenGL default appear black.
-                pipeline_cache.BindTexture(texture_index, null_surface.GetImageView());
+                pipeline_cache.BindTexture(texture_index, null_surface.ImageView());
             }
         } else {
-            pipeline_cache.BindTexture(texture_index, null_surface.GetImageView());
+            pipeline_cache.BindTexture(texture_index, null_surface.ImageView());
             pipeline_cache.BindSampler(texture_index, default_sampler);
         }
     }
@@ -1016,7 +1016,7 @@ bool RasterizerVulkan::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
         (float)src_rect.bottom / (float)scaled_height, (float)src_rect.left / (float)scaled_width,
         (float)src_rect.top / (float)scaled_height, (float)src_rect.right / (float)scaled_width);
 
-    screen_info.image_view = src_surface->GetImageView();
+    screen_info.image_view = src_surface->ImageView();
 
     return true;
 }

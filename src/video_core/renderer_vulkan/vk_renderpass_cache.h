@@ -40,8 +40,8 @@ struct hash<Vulkan::FramebufferInfo> {
 namespace Vulkan {
 
 class RenderpassCache {
-    static constexpr u32 MAX_COLOR_FORMATS = 5;
-    static constexpr u32 MAX_DEPTH_FORMATS = 4;
+    static constexpr std::size_t MAX_COLOR_FORMATS = 5;
+    static constexpr std::size_t MAX_DEPTH_FORMATS = 4;
 
 public:
     RenderpassCache(const Instance& instance, Scheduler& scheduler);
@@ -80,26 +80,31 @@ private:
     vk::Framebuffer CreateFramebuffer(const FramebufferInfo& info, vk::RenderPass renderpass);
 
 private:
-    struct RenderpassState {
-        vk::RenderPass renderpass;
-        vk::Framebuffer framebuffer;
-        vk::Rect2D render_area;
-        vk::ClearValue clear;
+    struct RenderTarget {
+        vk::ImageAspectFlags aspect;
+        vk::Image image;
+        vk::ImageView image_view;
 
-        [[nodiscard]] bool operator==(const RenderpassState& other) const {
-            return std::memcmp(this, &other, sizeof(RenderpassState)) == 0;
+        operator bool() const noexcept {
+            return image;
+        }
+
+        [[nodiscard]] bool operator==(const RenderTarget& other) const {
+            return image_view == other.image_view;
         }
     };
 
-    struct RenderingState {
-        vk::ImageView color_view;
-        vk::ImageView depth_view;
+    struct RenderingInfo {
+        RenderTarget color;
+        RenderTarget depth;
         vk::Rect2D render_area;
         vk::ClearValue clear;
         bool do_clear;
 
-        [[nodiscard]] bool operator==(const RenderpassState& other) const {
-            return std::memcmp(this, &other, sizeof(RenderpassState)) == 0;
+        [[nodiscard]] bool operator==(const RenderingInfo& other) const {
+            return color == other.color && depth == other.depth &&
+                   render_area == other.render_area && do_clear == other.do_clear &&
+                   std::memcmp(&clear, &other.clear, sizeof(vk::ClearValue)) == 0;
         }
     };
 
@@ -108,10 +113,10 @@ private:
     vk::RenderPass present_renderpass{};
     vk::RenderPass cached_renderpasses[MAX_COLOR_FORMATS + 1][MAX_DEPTH_FORMATS + 1][2];
     std::unordered_map<FramebufferInfo, vk::Framebuffer> framebuffers;
+    RenderingInfo info{};
     bool rendering = false;
     bool dynamic_rendering = false;
     u32 cmd_count{};
-    u64 state_hash{};
 };
 
 } // namespace Vulkan

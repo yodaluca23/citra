@@ -318,12 +318,12 @@ bool BlitHelper::BlitDepthStencil(Surface& source, Surface& dest,
     const std::array textures = {
         vk::DescriptorImageInfo{
             .sampler = nearest_sampler,
-            .imageView = source.GetDepthView(),
+            .imageView = source.DepthView(),
             .imageLayout = vk::ImageLayout::eGeneral,
         },
         vk::DescriptorImageInfo{
             .sampler = nearest_sampler,
-            .imageView = source.GetStencilView(),
+            .imageView = source.StencilView(),
             .imageLayout = vk::ImageLayout::eGeneral,
         },
     };
@@ -348,15 +348,15 @@ void BlitHelper::BlitD24S8ToR32(Surface& source, Surface& dest,
                                 const VideoCore::TextureBlit& blit) {
     const std::array textures = {
         vk::DescriptorImageInfo{
-            .imageView = source.GetDepthView(),
+            .imageView = source.DepthView(),
             .imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal,
         },
         vk::DescriptorImageInfo{
-            .imageView = source.GetStencilView(),
+            .imageView = source.StencilView(),
             .imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal,
         },
         vk::DescriptorImageInfo{
-            .imageView = dest.GetImageView(),
+            .imageView = dest.ImageView(),
             .imageLayout = vk::ImageLayout::eGeneral,
         },
     };
@@ -365,8 +365,8 @@ void BlitHelper::BlitD24S8ToR32(Surface& source, Surface& dest,
     device.updateDescriptorSetWithTemplate(set, compute_update_template, textures[0]);
 
     renderpass_cache.ExitRenderpass();
-    scheduler.Record([this, set, blit, src_image = source.alloc.image,
-                      dst_image = dest.alloc.image](vk::CommandBuffer cmdbuf) {
+    scheduler.Record([this, set, blit, src_image = source.Image(),
+                      dst_image = dest.Image()](vk::CommandBuffer cmdbuf) {
         const std::array pre_barriers = {
             vk::ImageMemoryBarrier{
                 .srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite,

@@ -2,12 +2,15 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include "common/microprofile.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_swapchain.h"
 #include "video_core/renderer_vulkan/vk_texture_mailbox.h"
 
 #include <vk_mem_alloc.h>
+
+MICROPROFILE_DEFINE(Vulkan_WaitPresent, "Vulkan", "Wait For Present", MP_RGB(128, 128, 128));
 
 namespace Vulkan {
 
@@ -129,14 +132,44 @@ void TextureMailbox::ReloadRenderFrame(Frontend::Frame* frame, u32 width, u32 he
 }
 
 Frontend::Frame* TextureMailbox::GetRenderFrame() {
-    std::unique_lock lock{free_mutex};
+    MICROPROFILE_SCOPE(Vulkan_WaitPresent);
 
-    if (free_queue.empty()) {
-        free_cv.wait(lock, [&] { return !free_queue.empty(); });
+    Frontend::Frame* frame{};
+    {
+        std::unique_lock lock{free_mutex};
+        if (free_queue.empty()) {
+            free_cv.wait(lock, [&] { return !free_queue.empty(); });
+        }
+
+        frame = free_queue.front();
+        free_queue.pop();
     }
 
-    Frontend::Frame* frame = free_queue.front();
-    free_queue.pop();
+    std::scoped_lock lock{frame->fence_mutex};
+
+    vk::Device device = instance.GetDevice();
+    vk::Result result{};
+
+    const auto Wait = [&]() {
+        result = device.waitForFences(frame->present_done, false, std::numeric_limits<u64>::max());
+        return result;
+    };
+
+    while (Wait() != vk::Result::eSuccess) {
+        // Retry if the waiting time out
+        if (result == vk::Result::eTimeout) {
+            continue;
+        }
+
+        // eErrorInitializationFailed occurs on Mali GPU drivers due to them
+        // using the ppoll() syscall which isn't correctly restarted after a signal,
+        // we need to manually retry waiting in that case
+        if (result == vk::Result::eErrorInitializationFailed) {
+            continue;
+        }
+    }
+
+    device.resetFences(frame->present_done);
     return frame;
 }
 

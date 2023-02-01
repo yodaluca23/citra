@@ -935,7 +935,7 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
     // to avoid having the interleave the data later. These should(?) be
     // uncommon anyways and the perf hit is very small
     if (type == VideoCore::SurfaceType::DepthStencil) {
-        return DepthStencilDownload(download, staging);
+        return /*DepthStencilDownload(download, staging)*/;
     }
 
     const bool is_scaled = res_scale != 1;

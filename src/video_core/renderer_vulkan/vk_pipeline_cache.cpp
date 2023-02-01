@@ -607,7 +607,8 @@ void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
         const vk::Device device = instance.GetDevice();
 
         // When using SPIR-V emit the fragment shader on the main thread
-        // since it's quite fast. This also heavily reduces flicker
+        // since it's quite fast. This also heavily reduces flicker when
+        // using asychronous shader compilation
         if (emit_spirv) {
             const std::vector code = GenerateFragmentShaderSPV(config);
             shader.module = CompileSPV(code, device);
