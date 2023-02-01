@@ -32,7 +32,9 @@ struct Frame {
 
 namespace OpenGL {
 
-/// Structure used for storing information about the textures for each 3DS screen
+/**
+ * Structure used for storing information about the textures for each 3DS screen
+ **/
 struct TextureInfo {
     OGLTexture resource;
     GLsizei width;
@@ -42,17 +44,13 @@ struct TextureInfo {
     GLenum gl_type;
 };
 
-/// Structure used for storing information about the display target for each 3DS screen
+/**
+ * Structure used for storing information about the display target for each 3DS screen
+ **/
 struct ScreenInfo {
     GLuint display_texture;
-    Common::Rectangle<float> display_texcoords;
+    Common::Rectangle<f32> display_texcoords;
     TextureInfo texture;
-};
-
-struct PresentationTexture {
-    u32 width = 0;
-    u32 height = 0;
-    OGLTexture texture;
 };
 
 class RasterizerOpenGL;
@@ -64,19 +62,16 @@ public:
 
     VideoCore::ResultStatus Init() override;
     VideoCore::RasterizerInterface* Rasterizer() override;
-    void ShutDown() override;
     void SwapBuffers() override;
-
-    /// Draws the latest frame from texture mailbox to the currently bound draw framebuffer in this
-    /// context
     void TryPresent(int timeout_ms, bool is_secondary) override;
-
-    /// Prepares for video dumping (e.g. create necessary buffers, etc)
     void PrepareVideoDumping() override;
     void CleanupVideoDumping() override;
     void Sync() override;
 
 private:
+    /**
+     * Initializes the OpenGL state and creates persistent objects.
+     */
     void InitOpenGLObjects();
     void ReloadSampler();
     void ReloadShader();
@@ -86,20 +81,38 @@ private:
                          std::unique_ptr<Frontend::TextureMailbox>& mailbox, bool flipped);
     void ConfigureFramebufferTexture(TextureInfo& texture,
                                      const GPU::Regs::FramebufferConfig& framebuffer);
+
+    /**
+     * Draws the emulated screens to the emulator window.
+     */
     void DrawScreens(const Layout::FramebufferLayout& layout, bool flipped);
-    void DrawSingleScreenRotated(const ScreenInfo& screen_info, float x, float y, float w, float h);
+
+    /**
+     * Draws a single texture to the emulator window.
+     */
     void DrawSingleScreen(const ScreenInfo& screen_info, float x, float y, float w, float h);
+    void DrawSingleScreenStereo(const ScreenInfo& screen_info_l, const ScreenInfo& screen_info_r,
+                                float x, float y, float w, float h);
+
+    /**
+     * Draws a single texture to the emulator window, rotating the texture to correct for the 3DS's
+     * LCD rotation.
+     */
+    void DrawSingleScreenRotated(const ScreenInfo& screen_info, float x, float y, float w, float h);
     void DrawSingleScreenStereoRotated(const ScreenInfo& screen_info_l,
                                        const ScreenInfo& screen_info_r, float x, float y, float w,
                                        float h);
-    void DrawSingleScreenStereo(const ScreenInfo& screen_info_l, const ScreenInfo& screen_info_r,
-                                float x, float y, float w, float h);
-    void UpdateFramerate();
 
-    // Loads framebuffer from emulated memory into the display information structure
+    /**
+     * Loads framebuffer from emulated memory into the active OpenGL texture.
+     */
     void LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& framebuffer,
                             ScreenInfo& screen_info, bool right_eye);
-    // Fills active OpenGL texture with the given RGB color.
+
+    /**
+     * Fills active OpenGL texture with the given RGB color. Since the color is solid, the texture
+     * can be 1x1 but will stretch across whatever it's rendered on.
+     */
     void LoadColorToActiveGLTexture(u8 color_r, u8 color_g, u8 color_b, const TextureInfo& texture);
 
 private:
@@ -112,7 +125,8 @@ private:
     OGLBuffer vertex_buffer;
     OGLProgram shader;
     OGLFramebuffer screenshot_framebuffer;
-    OGLSampler filter_sampler;
+    std::array<OGLSampler, 2> present_samplers;
+    u32 current_sampler = 0;
 
     /// Display information for top and bottom screens respectively
     std::array<ScreenInfo, 3> screen_infos;

@@ -32,17 +32,16 @@ extern std::unique_ptr<RendererBase> g_renderer; ///< Renderer plugin
 extern std::atomic<bool> g_hw_renderer_enabled;
 extern std::atomic<bool> g_shader_jit_enabled;
 extern std::atomic<bool> g_hw_shader_enabled;
-extern std::atomic<bool> g_separable_shader_enabled;
 extern std::atomic<bool> g_hw_shader_accurate_mul;
-extern std::atomic<bool> g_use_disk_shader_cache;
-extern std::atomic<bool> g_renderer_bg_color_update_requested;
-extern std::atomic<bool> g_renderer_sampler_update_requested;
-extern std::atomic<bool> g_renderer_shader_update_requested;
 extern std::atomic<bool> g_texture_filter_update_requested;
 
 extern Memory::MemorySystem* g_memory;
 
-enum class ResultStatus { Success, ErrorRendererInit, ErrorGenericDrivers };
+enum class ResultStatus {
+    Success,
+    ErrorRendererInit,
+    ErrorGenericDrivers,
+};
 
 /// Initialize the video core
 ResultStatus Init(Frontend::EmuWindow& emu_window, Frontend::EmuWindow* secondary_window,

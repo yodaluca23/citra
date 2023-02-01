@@ -4,8 +4,8 @@
 
 #pragma once
 
+#include <atomic>
 #include "common/common_types.h"
-#include "common/vector_math.h"
 #include "video_core/rasterizer_interface.h"
 #include "video_core/video_core.h"
 
@@ -15,10 +15,14 @@ class EmuWindow;
 
 struct RendererSettings {
     // Screenshot
-    std::atomic<bool> screenshot_requested{false};
+    std::atomic_bool screenshot_requested{false};
     void* screenshot_bits{};
     std::function<void()> screenshot_complete_callback;
     Layout::FramebufferLayout screenshot_framebuffer_layout;
+    // Present
+    std::atomic_bool bg_color_update_requested{true};
+    std::atomic_bool sampler_update_requested{true};
+    std::atomic_bool shader_update_requested{true};
 };
 
 class RendererBase : NonCopyable {
@@ -31,9 +35,6 @@ public:
 
     /// Returns the rasterizer owned by the renderer
     virtual VideoCore::RasterizerInterface* Rasterizer() = 0;
-
-    /// Shutdown the renderer
-    virtual void ShutDown() = 0;
 
     /// Finalize rendering the guest frame and draw into the presentation texture
     virtual void SwapBuffers() = 0;
@@ -80,11 +81,11 @@ public:
     }
 
     [[nodiscard]] RendererSettings& Settings() {
-        return renderer_settings;
+        return settings;
     }
 
     [[nodiscard]] const RendererSettings& Settings() const {
-        return renderer_settings;
+        return settings;
     }
 
     /// Refreshes the settings common to all renderers
@@ -98,7 +99,7 @@ public:
                            const Layout::FramebufferLayout& layout);
 
 protected:
-    RendererSettings renderer_settings;
+    RendererSettings settings;
     Frontend::EmuWindow& render_window;    ///< Reference to the render window handle.
     Frontend::EmuWindow* secondary_window; ///< Reference to the secondary render window handle.
     f32 m_current_fps = 0.0f;              ///< Current framerate, should be set by the renderer

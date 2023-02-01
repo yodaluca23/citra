@@ -153,8 +153,6 @@ VideoCore::RasterizerInterface* RendererVulkan::Rasterizer() {
     return &rasterizer;
 }
 
-void RendererVulkan::ShutDown() {}
-
 void RendererVulkan::Sync() {
     rasterizer.SyncEntireState();
 }
@@ -214,7 +212,6 @@ void RendererVulkan::RenderToMailbox(const Layout::FramebufferLayout& layout,
 
         const auto [width, height] = swapchain.GetExtent();
         if (width != frame->width || height != frame->height) {
-            LOG_INFO(Render_Vulkan, "Reloading render frame");
             mailbox->ReloadRenderFrame(frame, width, height);
         }
 
@@ -836,19 +833,15 @@ void RendererVulkan::DrawSingleScreenStereo(u32 screen_id_l, u32 screen_id_r, fl
 }
 
 void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool flipped) {
-    if (VideoCore::g_renderer_bg_color_update_requested.exchange(false)) {
-        // Update background color before drawing
+    if (settings.bg_color_update_requested.exchange(false)) {
         clear_color.float32[0] = Settings::values.bg_red.GetValue();
         clear_color.float32[1] = Settings::values.bg_green.GetValue();
         clear_color.float32[2] = Settings::values.bg_blue.GetValue();
     }
-
-    if (VideoCore::g_renderer_sampler_update_requested.exchange(false)) {
-        // Set the new filtering mode for the sampler
+    if (settings.sampler_update_requested.exchange(false)) {
         ReloadSampler();
     }
-
-    if (VideoCore::g_renderer_shader_update_requested.exchange(false)) {
+    if (settings.shader_update_requested.exchange(false)) {
         ReloadPipeline();
     }
 
@@ -1161,11 +1154,11 @@ void RendererVulkan::SwapBuffers() {
 }
 
 void RendererVulkan::RenderScreenshot() {
-    if (!renderer_settings.screenshot_requested) {
+    if (!settings.screenshot_requested.exchange(false)) {
         return;
     }
 
-    const Layout::FramebufferLayout layout{renderer_settings.screenshot_framebuffer_layout};
+    const Layout::FramebufferLayout layout{settings.screenshot_framebuffer_layout};
     const vk::Extent2D extent = swapchain.GetExtent();
     const u32 width = std::min(layout.width, extent.width);
     const u32 height = std::min(layout.height, extent.height);
@@ -1358,7 +1351,7 @@ void RendererVulkan::RenderScreenshot() {
 
     // Copy backing image data to the QImage screenshot buffer
     const u8* data = reinterpret_cast<const u8*>(alloc_info.pMappedData);
-    std::memcpy(renderer_settings.screenshot_bits, data + subresource_layout.offset,
+    std::memcpy(settings.screenshot_bits, data + subresource_layout.offset,
                 subresource_layout.size);
 
     // Destroy allocated resources
@@ -1366,8 +1359,7 @@ void RendererVulkan::RenderScreenshot() {
     device.destroyFramebuffer(frame.framebuffer);
     device.destroyImageView(frame.image_view);
 
-    renderer_settings.screenshot_complete_callback();
-    renderer_settings.screenshot_requested = false;
+    settings.screenshot_complete_callback();
 }
 
 void RendererVulkan::NotifySurfaceChanged() {
