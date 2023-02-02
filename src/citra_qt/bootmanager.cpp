@@ -25,7 +25,8 @@
 #include "video_core/video_core.h"
 
 #if defined(__APPLE__)
-#include "citra_qt/applesurfacehelper.h"
+#include <objc/message.h>
+#include <objc/objc.h>
 #endif
 
 #if !defined(WIN32)
@@ -351,22 +352,26 @@ static Frontend::EmuWindow::WindowSystemInfo GetWindowSystemInfo(QWindow* window
     Frontend::EmuWindow::WindowSystemInfo wsi;
     wsi.type = GetWindowSystemType();
 
-    // Our Win32 Qt external doesn't have the private API.
+    if (window) {
 #if defined(WIN32)
-    wsi.render_surface = window ? reinterpret_cast<void*>(window->winId()) : nullptr;
+        // Our Win32 Qt external doesn't have the private API.
+        wsi.render_surface = reinterpret_cast<void*>(window->winId());
 #elif defined(__APPLE__)
-    wsi.render_surface =
-        window ? AppleSurfaceHelper::GetSurfaceLayer(reinterpret_cast<void*>(window->winId()))
-               : nullptr;
+        wsi.render_surface = reinterpret_cast<void* (*)(id, SEL)>(objc_msgSend)(
+            reinterpret_cast<id>(window->winId()), sel_registerName("layer"));
 #else
-    QPlatformNativeInterface* pni = QGuiApplication::platformNativeInterface();
-    wsi.display_connection = pni->nativeResourceForWindow("display", window);
-    if (wsi.type == Frontend::WindowSystemType::Wayland)
-        wsi.render_surface = window ? pni->nativeResourceForWindow("surface", window) : nullptr;
-    else
-        wsi.render_surface = window ? reinterpret_cast<void*>(window->winId()) : nullptr;
+        QPlatformNativeInterface* pni = QGuiApplication::platformNativeInterface();
+        wsi.display_connection = pni->nativeResourceForWindow("display", window);
+        if (wsi.type == Frontend::WindowSystemType::Wayland)
+            wsi.render_surface = pni->nativeResourceForWindow("surface", window);
+        else
+            wsi.render_surface = reinterpret_cast<void*>(window->winId());
 #endif
-    wsi.render_surface_scale = window ? static_cast<float>(window->devicePixelRatio()) : 1.0f;
+        wsi.render_surface_scale = static_cast<float>(window->devicePixelRatio());
+    } else {
+        wsi.render_surface = nullptr;
+        wsi.render_surface_scale = 1.0f;
+    }
 
     return wsi;
 }
