@@ -24,8 +24,6 @@ struct Rectangle {
     constexpr Rectangle(T left, T top, T right, T bottom)
         : left(left), top(top), right(right), bottom(bottom) {}
 
-    constexpr auto operator<=>(const Rectangle&) const = default;
-
     constexpr void operator*=(const T value) {
         left *= value;
         top *= value;
@@ -33,10 +31,19 @@ struct Rectangle {
         bottom *= value;
     }
 
-    [[nodiscard]] constexpr Rectangle operator*(const T value) const {
+    [[nodiscard]] constexpr bool operator==(const Rectangle<T>& rhs) const {
+        return (left == rhs.left) && (top == rhs.top) && (right == rhs.right) &&
+               (bottom == rhs.bottom);
+    }
+
+    [[nodiscard]] constexpr bool operator!=(const Rectangle<T>& rhs) const {
+        return !operator==(rhs);
+    }
+
+    [[nodiscard]] constexpr Rectangle<T> operator*(const T value) const {
         return Rectangle{left * value, top * value, right * value, bottom * value};
     }
-    [[nodiscard]] constexpr Rectangle operator/(const T value) const {
+    [[nodiscard]] constexpr Rectangle<T> operator/(const T value) const {
         return Rectangle{left / value, top / value, right / value, bottom / value};
     }
     [[nodiscard]] constexpr T GetWidth() const {
