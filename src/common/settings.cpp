@@ -50,7 +50,7 @@ void Apply() {
 #endif
 
     if (VideoCore::g_renderer) {
-        RendererSettings& settings = VideoCore::g_renderer->Settings();
+        auto& settings = VideoCore::g_renderer->Settings();
         settings.bg_color_update_requested = true;
         settings.sampler_update_requested = true;
         settings.shader_update_requested = true;

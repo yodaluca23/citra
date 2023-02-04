@@ -31,6 +31,7 @@
 #include "input_common/main.h"
 #include "network/network.h"
 #include "video_core/renderer_base.h"
+#include "video_core/video_core.h"
 
 #undef _UNICODE
 #include <getopt.h>

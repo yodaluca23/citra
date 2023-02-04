@@ -56,7 +56,7 @@ struct ScreenInfo {
 
 class RasterizerVulkan;
 
-class RendererVulkan : public RendererBase {
+class RendererVulkan : public VideoCore::RendererBase {
     static constexpr std::size_t PRESENT_PIPELINES = 3;
 
 public:

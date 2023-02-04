@@ -6,6 +6,8 @@
 #include "core/frontend/emu_window.h"
 #include "video_core/renderer_base.h"
 
+namespace VideoCore {
+
 RendererBase::RendererBase(Frontend::EmuWindow& window, Frontend::EmuWindow* secondary_window_)
     : render_window{window}, secondary_window{secondary_window_} {}
 
@@ -41,3 +43,5 @@ void RendererBase::RequestScreenshot(void* data, std::function<void()> callback,
     settings.screenshot_framebuffer_layout = layout;
     settings.screenshot_requested = true;
 }
+
+} // namespace VideoCore

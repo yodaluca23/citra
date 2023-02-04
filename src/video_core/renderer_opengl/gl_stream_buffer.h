@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #pragma once
+
 #include <tuple>
 #include "video_core/renderer_opengl/gl_resource_manager.h"
 

@@ -44,6 +44,7 @@
 #include "jni/ndk_motion.h"
 #include "video_core/renderer_base.h"
 #include "video_core/renderer_opengl/texture_filters/texture_filterer.h"
+#include "video_core/video_core.h"
 
 namespace {
 

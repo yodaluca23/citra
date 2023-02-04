@@ -5,13 +5,14 @@
 #pragma once
 
 #include <atomic>
-#include "common/common_types.h"
+#include "core/frontend/framebuffer_layout.h"
 #include "video_core/rasterizer_interface.h"
-#include "video_core/video_core.h"
 
 namespace Frontend {
 class EmuWindow;
 }
+
+namespace VideoCore {
 
 struct RendererSettings {
     // Screenshot
@@ -102,3 +103,5 @@ protected:
     f32 m_current_fps = 0.0f;              ///< Current framerate, should be set by the renderer
     int m_current_frame = 0;               ///< Current frame, should be set by the renderer
 };
+
+} // namespace VideoCore

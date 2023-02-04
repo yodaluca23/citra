@@ -58,7 +58,7 @@ struct ScreenInfo {
 
 class RasterizerOpenGL;
 
-class RendererOpenGL : public RendererBase {
+class RendererOpenGL : public VideoCore::RendererBase {
 public:
     explicit RendererOpenGL(Memory::MemorySystem& memory, Frontend::EmuWindow& window,
                             Frontend::EmuWindow* secondary_window);
