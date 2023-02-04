@@ -14,6 +14,10 @@
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan_format_traits.hpp>
 
+MICROPROFILE_DEFINE(Vulkan_ImageAlloc, "Vulkan", "Texture Allocation", MP_RGB(192, 52, 235));
+MICROPROFILE_DEFINE(Vulkan_Upload, "Vulkan", "Texture Upload", MP_RGB(128, 192, 64));
+MICROPROFILE_DEFINE(Vulkan_Download, "Vulkan", "Texture Download", MP_RGB(128, 192, 64));
+
 namespace Vulkan {
 
 struct RecordParams {
@@ -152,9 +156,7 @@ StagingData TextureRuntime::FindStaging(u32 size, bool upload) {
     };
 }
 
-MICROPROFILE_DEFINE(Vulkan_Finish, "Vulkan", "Scheduler Finish", MP_RGB(52, 192, 235));
 void TextureRuntime::Finish() {
-    MICROPROFILE_SCOPE(Vulkan_Finish);
     scheduler.Finish();
 }
 
@@ -164,7 +166,6 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
     return Allocate(width, height, format, type, traits.native, traits.usage, traits.aspect);
 }
 
-MICROPROFILE_DEFINE(Vulkan_ImageAlloc, "Vulkan", "TextureRuntime Finish", MP_RGB(192, 52, 235));
 ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelFormat pixel_format,
                                     VideoCore::TextureType type, vk::Format format,
                                     vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect) {
@@ -828,7 +829,6 @@ Surface::~Surface() {
     }
 }
 
-MICROPROFILE_DEFINE(Vulkan_Upload, "Vulkan", "Texture Upload", MP_RGB(128, 192, 64));
 void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging) {
     MICROPROFILE_SCOPE(Vulkan_Upload);
 
@@ -925,7 +925,6 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
     InvalidateAllWatcher();
 }
 
-MICROPROFILE_DEFINE(Vulkan_Download, "Vulkan", "Texture Download", MP_RGB(128, 192, 64));
 void Surface::Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging) {
     MICROPROFILE_SCOPE(Vulkan_Download);
 

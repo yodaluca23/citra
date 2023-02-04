@@ -17,6 +17,9 @@
 #include "video_core/renderer_vulkan/vk_shader_gen_spv.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
 
+MICROPROFILE_DEFINE(Vulkan_Pipeline, "Vulkan", "Pipeline Building", MP_RGB(0, 192, 32));
+MICROPROFILE_DEFINE(Vulkan_Bind, "Vulkan", "Pipeline Bind", MP_RGB(192, 32, 32));
+
 namespace Vulkan {
 
 u32 AttribBytes(Pica::PipelineRegs::VertexAttributeFormat format, u32 size) {
@@ -132,7 +135,6 @@ PipelineCache::GraphicsPipeline::~GraphicsPipeline() {
     }
 }
 
-MICROPROFILE_DEFINE(Vulkan_Pipeline, "Vulkan", "Pipeline Building", MP_RGB(0, 192, 32));
 bool PipelineCache::GraphicsPipeline::Build(bool fail_on_compile_required) {
     if (fail_on_compile_required) {
         if (!instance.IsPipelineCreationCacheControlSupported()) {
@@ -461,7 +463,6 @@ void PipelineCache::SaveDiskCache() {
     cache_file.Close();
 }
 
-MICROPROFILE_DEFINE(Vulkan_Bind, "Vulkan", "Pipeline Bind", MP_RGB(192, 32, 32));
 bool PipelineCache::BindPipeline(const PipelineInfo& info, bool wait_built) {
     MICROPROFILE_SCOPE(Vulkan_Bind);
 

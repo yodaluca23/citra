@@ -8,7 +8,6 @@
 #include "common/assert.h"
 #include "common/literals.h"
 #include "common/logging/log.h"
-#include "common/microprofile.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
 
 namespace Vulkan {
@@ -159,15 +158,11 @@ bool InitializeCompiler() {
     return true;
 }
 
-MICROPROFILE_DEFINE(Vulkan_GLSLCompilation, "VulkanShader", "GLSL Shader Compilation",
-                    MP_RGB(100, 255, 52));
 vk::ShaderModule Compile(std::string_view code, vk::ShaderStageFlagBits stage, vk::Device device,
                          ShaderOptimization level) {
     if (!InitializeCompiler()) {
         return VK_NULL_HANDLE;
     }
-
-    MICROPROFILE_SCOPE(Vulkan_GLSLCompilation);
 
     EProfile profile = ECoreProfile;
     EShMessages messages =

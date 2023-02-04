@@ -9,6 +9,9 @@
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 
+MICROPROFILE_DEFINE(Vulkan_WaitForWorker, "Vulkan", "Wait for worker", MP_RGB(255, 192, 192));
+MICROPROFILE_DEFINE(Vulkan_Submit, "Vulkan", "Submit Exectution", MP_RGB(255, 192, 255));
+
 namespace Vulkan {
 
 void Scheduler::CommandChunk::ExecuteAll(vk::CommandBuffer cmdbuf) {
@@ -49,7 +52,6 @@ void Scheduler::Finish(vk::Semaphore signal, vk::Semaphore wait) {
     Wait(presubmit_tick);
 }
 
-MICROPROFILE_DEFINE(Vulkan_WaitForWorker, "Vulkan", "Wait for worker", MP_RGB(255, 192, 192));
 void Scheduler::WaitWorker() {
     if (!use_worker_thread) {
         return;
@@ -110,7 +112,6 @@ void Scheduler::AllocateWorkerCommandBuffers() {
     current_cmdbuf.begin(begin_info);
 }
 
-MICROPROFILE_DEFINE(Vulkan_Submit, "Vulkan", "Submit Exectution", MP_RGB(255, 192, 255));
 void Scheduler::SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wait_semaphore) {
     const vk::Semaphore handle = master_semaphore.Handle();
     const u64 signal_value = master_semaphore.NextTick();

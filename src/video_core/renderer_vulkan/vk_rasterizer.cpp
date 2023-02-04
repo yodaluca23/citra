@@ -15,7 +15,12 @@
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
-#include "video_core/video_core.h"
+
+MICROPROFILE_DEFINE(Vulkan_VS, "Vulkan", "Vertex Shader Setup", MP_RGB(192, 128, 128));
+MICROPROFILE_DEFINE(Vulkan_GS, "Vulkan", "Geometry Shader Setup", MP_RGB(128, 192, 128));
+MICROPROFILE_DEFINE(Vulkan_Drawing, "Vulkan", "Drawing", MP_RGB(128, 128, 192));
+MICROPROFILE_DEFINE(Vulkan_CacheManagement, "Vulkan", "Cache Mgmt", MP_RGB(100, 255, 100));
+MICROPROFILE_DEFINE(Vulkan_Blits, "Vulkan", "Blits", MP_RGB(100, 100, 255));
 
 namespace Vulkan {
 
@@ -339,14 +344,12 @@ void RasterizerVulkan::SetupFixedAttribs() {
     stream_buffer.Commit(offset);
 }
 
-MICROPROFILE_DEFINE(Vulkan_VS, "Vulkan", "Vertex Shader Setup", MP_RGB(192, 128, 128));
 bool RasterizerVulkan::SetupVertexShader() {
     MICROPROFILE_SCOPE(Vulkan_VS);
     return pipeline_cache.UseProgrammableVertexShader(Pica::g_state.regs, Pica::g_state.vs,
                                                       pipeline_info.vertex_layout);
 }
 
-MICROPROFILE_DEFINE(Vulkan_GS, "Vulkan", "Geometry Shader Setup", MP_RGB(128, 192, 128));
 bool RasterizerVulkan::SetupGeometryShader() {
     MICROPROFILE_SCOPE(Vulkan_GS);
     const auto& regs = Pica::g_state.regs;
@@ -459,7 +462,6 @@ void RasterizerVulkan::DrawTriangles() {
     Draw(false, false);
 }
 
-MICROPROFILE_DEFINE(Vulkan_Drawing, "Vulkan", "Drawing", MP_RGB(128, 128, 192));
 bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     MICROPROFILE_SCOPE(Vulkan_Drawing);
     const auto& regs = Pica::g_state.regs;
@@ -834,7 +836,6 @@ void RasterizerVulkan::NotifyFixedFunctionPicaRegisterChanged(u32 id) {
     }
 }
 
-MICROPROFILE_DEFINE(Vulkan_CacheManagement, "Vulkan", "Cache Mgmt", MP_RGB(100, 255, 100));
 void RasterizerVulkan::FlushAll() {
     MICROPROFILE_SCOPE(Vulkan_CacheManagement);
     res_cache.FlushAll();
@@ -860,7 +861,6 @@ void RasterizerVulkan::ClearAll(bool flush) {
     res_cache.ClearAll(flush);
 }
 
-MICROPROFILE_DEFINE(Vulkan_Blits, "Vulkan", "Blits", MP_RGB(100, 100, 255));
 bool RasterizerVulkan::AccelerateDisplayTransfer(const GPU::Regs::DisplayTransferConfig& config) {
     MICROPROFILE_SCOPE(Vulkan_Blits);
 
