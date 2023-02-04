@@ -114,6 +114,9 @@ RendererVulkan::RendererVulkan(Memory::MemorySystem& memory_, Frontend::EmuWindo
       rasterizer{memory,       render_window, instance,        scheduler,
                  desc_manager, runtime,       renderpass_cache} {
     Report();
+    CompileShaders();
+    BuildLayouts();
+    BuildPipelines();
     window.mailbox = std::make_unique<TextureMailbox>(instance, swapchain, renderpass_cache);
 }
 
@@ -141,17 +144,6 @@ RendererVulkan::~RendererVulkan() {
     }
 
     render_window.mailbox.reset();
-}
-
-VideoCore::ResultStatus RendererVulkan::Init() {
-    CompileShaders();
-    BuildLayouts();
-    BuildPipelines();
-    return VideoCore::ResultStatus::Success;
-}
-
-VideoCore::RasterizerInterface* RendererVulkan::Rasterizer() {
-    return &rasterizer;
 }
 
 void RendererVulkan::Sync() {

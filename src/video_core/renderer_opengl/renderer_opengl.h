@@ -9,8 +9,7 @@
 #include "video_core/renderer_base.h"
 #include "video_core/renderer_opengl/frame_dumper_opengl.h"
 #include "video_core/renderer_opengl/gl_driver.h"
-#include "video_core/renderer_opengl/gl_resource_manager.h"
-#include "video_core/renderer_opengl/gl_state.h"
+#include "video_core/renderer_opengl/gl_rasterizer.h"
 
 namespace Layout {
 struct FramebufferLayout;
@@ -65,8 +64,10 @@ public:
                             Frontend::EmuWindow* secondary_window);
     ~RendererOpenGL() override;
 
-    VideoCore::ResultStatus Init() override;
-    VideoCore::RasterizerInterface* Rasterizer() override;
+    [[nodiscard]] VideoCore::RasterizerInterface* Rasterizer() override {
+        return &rasterizer;
+    }
+
     void SwapBuffers() override;
     void TryPresent(int timeout_ms, bool is_secondary) override;
     void PrepareVideoDumping() override;
@@ -124,7 +125,7 @@ private:
     Memory::MemorySystem& memory;
     Driver driver;
     OpenGLState state;
-    std::unique_ptr<RasterizerOpenGL> rasterizer;
+    RasterizerOpenGL rasterizer;
 
     // OpenGL object IDs
     OGLVertexArray vertex_array;

@@ -64,8 +64,10 @@ public:
                             Frontend::EmuWindow* secondary_window);
     ~RendererVulkan() override;
 
-    VideoCore::ResultStatus Init() override;
-    VideoCore::RasterizerInterface* Rasterizer() override;
+    [[nodiscard]] VideoCore::RasterizerInterface* Rasterizer() override {
+        return &rasterizer;
+    }
+
     void SwapBuffers() override;
     void NotifySurfaceChanged() override;
     void TryPresent(int timeout_ms, bool is_secondary) override;

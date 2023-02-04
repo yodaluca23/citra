@@ -278,7 +278,17 @@ RendererOpenGL::RendererOpenGL(Memory::MemorySystem& memory_, Frontend::EmuWindo
     : RendererBase{window, secondary_window}, memory{memory_},
       driver{Settings::values.graphics_api.GetValue() == Settings::GraphicsAPI::OpenGLES,
              Settings::values.renderer_debug.GetValue()},
-      frame_dumper(Core::System::GetInstance().VideoDumper(), window) {
+      rasterizer{memory, render_window, driver}, frame_dumper{
+                                                     Core::System::GetInstance().VideoDumper(),
+                                                     window} {
+
+    const Vendor vendor = driver.GetVendor();
+    if (vendor == Vendor::Generic || vendor == Vendor::Unknown) {
+        LOG_WARNING(Render_OpenGL, "Unknown vendor: {}", driver.GetVendorString());
+    }
+
+    InitOpenGLObjects();
+
     window.mailbox = std::make_unique<OGLTextureMailbox>();
     if (secondary_window) {
         secondary_window->mailbox = std::make_unique<OGLTextureMailbox>();
@@ -287,22 +297,6 @@ RendererOpenGL::RendererOpenGL(Memory::MemorySystem& memory_, Frontend::EmuWindo
 }
 
 RendererOpenGL::~RendererOpenGL() = default;
-
-VideoCore::ResultStatus RendererOpenGL::Init() {
-    const Vendor vendor = driver.GetVendor();
-    if (vendor == Vendor::Generic || vendor == Vendor::Unknown) {
-        LOG_WARNING(Render_OpenGL, "Unknown vendor: {}", driver.GetVendorString());
-    }
-
-    InitOpenGLObjects();
-    rasterizer = std::make_unique<RasterizerOpenGL>(memory, render_window, driver);
-
-    return VideoCore::ResultStatus::Success;
-}
-
-VideoCore::RasterizerInterface* RendererOpenGL::Rasterizer() {
-    return rasterizer.get();
-}
 
 void RendererOpenGL::SwapBuffers() {
     // Maintain the rasterizer's state as a priority
@@ -489,8 +483,8 @@ void RendererOpenGL::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& fram
     // only allows rows to have a memory alignement of 4.
     ASSERT(pixel_stride % 4 == 0);
 
-    if (!rasterizer->AccelerateDisplay(framebuffer, framebuffer_addr,
-                                       static_cast<u32>(pixel_stride), screen_info)) {
+    if (!rasterizer.AccelerateDisplay(framebuffer, framebuffer_addr, static_cast<u32>(pixel_stride),
+                                      screen_info)) {
         // Reset the screen info's display texture to its own permanent texture
         screen_info.display_texture = screen_info.texture.resource.handle;
         screen_info.display_texcoords = Common::Rectangle<float>(0.f, 0.f, 1.f, 1.f);
@@ -1075,7 +1069,7 @@ void RendererOpenGL::CleanupVideoDumping() {
 }
 
 void RendererOpenGL::Sync() {
-    rasterizer->SyncEntireState();
+    rasterizer.SyncEntireState();
 }
 
 } // namespace OpenGL

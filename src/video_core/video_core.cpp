@@ -50,14 +50,7 @@ ResultStatus Init(Frontend::EmuWindow& emu_window, Frontend::EmuWindow* secondar
         UNREACHABLE();
     }
 
-    ResultStatus result = g_renderer->Init();
-    if (result != ResultStatus::Success) {
-        LOG_ERROR(Render, "Video core initialization failed");
-    } else {
-        LOG_INFO(Render, "Video core initialization OK");
-    }
-
-    return result;
+    return ResultStatus::Success;
 }
 
 /// Shutdown the video core
