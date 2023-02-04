@@ -15,7 +15,6 @@
 #include "video_core/renderer_opengl/gl_shader_gen.h"
 #include "video_core/renderer_opengl/pica_to_gl.h"
 #include "video_core/renderer_opengl/renderer_opengl.h"
-#include "video_core/video_core.h"
 
 namespace OpenGL {
 
@@ -66,7 +65,7 @@ RasterizerOpenGL::RasterizerOpenGL(Memory::MemorySystem& memory_, Frontend::EmuW
 
     // Set vertex attributes for software shader path
     state.draw.vertex_array = sw_vao.handle;
-    state.draw.vertex_buffer = vertex_buffer.GetHandle();
+    state.draw.vertex_buffer = vertex_buffer.Handle();
     state.Apply();
 
     glVertexAttribPointer(ATTRIBUTE_POSITION, 4, GL_FLOAT, GL_FALSE, sizeof(HardwareVertex),
@@ -111,16 +110,16 @@ RasterizerOpenGL::RasterizerOpenGL(Memory::MemorySystem& memory_, Frontend::EmuW
     state.texture_buffer_lut_rgba.texture_buffer = texture_buffer_lut_rgba.handle;
     state.Apply();
     glActiveTexture(TextureUnits::TextureBufferLUT_LF.Enum());
-    glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32F, texture_lf_buffer.GetHandle());
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32F, texture_lf_buffer.Handle());
     glActiveTexture(TextureUnits::TextureBufferLUT_RG.Enum());
-    glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32F, texture_buffer.GetHandle());
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32F, texture_buffer.Handle());
     glActiveTexture(TextureUnits::TextureBufferLUT_RGBA.Enum());
-    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, texture_buffer.GetHandle());
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, texture_buffer.Handle());
 
     // Bind index buffer for hardware shader path
     state.draw.vertex_array = hw_vao.handle;
     state.Apply();
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer.GetHandle());
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer.Handle());
 
     glEnable(GL_BLEND);
 
@@ -166,7 +165,7 @@ void RasterizerOpenGL::SetupVertexArray(u8* array_ptr, GLintptr buffer_offset,
     PAddr base_address = vertex_attributes.GetPhysicalBaseAddress();
 
     state.draw.vertex_array = hw_vao.handle;
-    state.draw.vertex_buffer = vertex_buffer.GetHandle();
+    state.draw.vertex_buffer = vertex_buffer.Handle();
     state.Apply();
 
     std::array<bool, 16> enable_attributes{};
@@ -305,7 +304,7 @@ bool RasterizerOpenGL::AccelerateDrawBatchInternal(bool is_indexed) {
         return false;
     }
 
-    state.draw.vertex_buffer = vertex_buffer.GetHandle();
+    state.draw.vertex_buffer = vertex_buffer.Handle();
     state.Apply();
 
     u8* buffer_ptr;
@@ -625,7 +624,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
         succeeded = AccelerateDrawBatchInternal(is_indexed);
     } else {
         state.draw.vertex_array = sw_vao.handle;
-        state.draw.vertex_buffer = vertex_buffer.GetHandle();
+        state.draw.vertex_buffer = vertex_buffer.Handle();
         shader_program_manager.UseTrivialVertexShader();
         shader_program_manager.UseTrivialGeometryShader();
         shader_program_manager.ApplyTo(state);
@@ -1184,7 +1183,7 @@ void RasterizerOpenGL::SyncAndUploadLUTsLF() {
     GLintptr offset;
     bool invalidate;
     std::size_t bytes_used = 0;
-    glBindBuffer(GL_TEXTURE_BUFFER, texture_lf_buffer.GetHandle());
+    glBindBuffer(GL_TEXTURE_BUFFER, texture_lf_buffer.Handle());
     std::tie(buffer, offset, invalidate) = texture_lf_buffer.Map(max_size, sizeof(Common::Vec4f));
 
     // Sync the lighting luts
@@ -1254,7 +1253,7 @@ void RasterizerOpenGL::SyncAndUploadLUTs() {
     GLintptr offset;
     bool invalidate;
     std::size_t bytes_used = 0;
-    glBindBuffer(GL_TEXTURE_BUFFER, texture_buffer.GetHandle());
+    glBindBuffer(GL_TEXTURE_BUFFER, texture_buffer.Handle());
     std::tie(buffer, offset, invalidate) = texture_buffer.Map(max_size, sizeof(Common::Vec4f));
 
     // helper function for SyncProcTexNoiseLUT/ColorMap/AlphaMap
@@ -1349,7 +1348,7 @@ void RasterizerOpenGL::SyncAndUploadLUTs() {
 void RasterizerOpenGL::UploadUniforms(bool accelerate_draw) {
     // glBindBufferRange below also changes the generic buffer binding point, so we sync the state
     // first
-    state.draw.uniform_buffer = uniform_buffer.GetHandle();
+    state.draw.uniform_buffer = uniform_buffer.Handle();
     state.Apply();
 
     bool sync_vs = accelerate_draw;
@@ -1371,7 +1370,7 @@ void RasterizerOpenGL::UploadUniforms(bool accelerate_draw) {
         vs_uniforms.uniforms.SetFromRegs(Pica::g_state.regs.vs, Pica::g_state.vs);
         std::memcpy(uniforms + used_bytes, &vs_uniforms, sizeof(vs_uniforms));
         glBindBufferRange(GL_UNIFORM_BUFFER, static_cast<GLuint>(Pica::Shader::UniformBindings::VS),
-                          uniform_buffer.GetHandle(), offset + used_bytes, sizeof(vs_uniforms));
+                          uniform_buffer.Handle(), offset + used_bytes, sizeof(vs_uniforms));
         used_bytes += uniform_size_aligned_vs;
     }
 
@@ -1380,7 +1379,7 @@ void RasterizerOpenGL::UploadUniforms(bool accelerate_draw) {
                     sizeof(Pica::Shader::UniformData));
         glBindBufferRange(
             GL_UNIFORM_BUFFER, static_cast<GLuint>(Pica::Shader::UniformBindings::Common),
-            uniform_buffer.GetHandle(), offset + used_bytes, sizeof(Pica::Shader::UniformData));
+            uniform_buffer.Handle(), offset + used_bytes, sizeof(Pica::Shader::UniformData));
         uniform_block_data.dirty = false;
         used_bytes += uniform_size_aligned_fs;
     }

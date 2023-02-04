@@ -23,7 +23,7 @@ struct StagingData {
     GLuint buffer;
     u32 size = 0;
     std::span<u8> mapped{};
-    GLintptr buffer_offset = 0;
+    u64 buffer_offset = 0;
 };
 
 class Driver;
@@ -46,6 +46,7 @@ public:
     /// Returns the OpenGL format tuple associated with the provided pixel format
     const FormatTuple& GetFormatTuple(VideoCore::PixelFormat pixel_format);
 
+    /// Causes a GPU command flush
     void Finish() const {}
 
     /// Allocates an OpenGL texture with the specified dimentions and format
@@ -92,7 +93,8 @@ private:
     TextureFilterer filterer;
     std::array<ReinterpreterList, VideoCore::PIXEL_FORMAT_COUNT> reinterpreters;
     std::unordered_multimap<VideoCore::HostTextureTag, OGLTexture> texture_recycler;
-    OGLStreamBuffer upload_buffer, download_buffer;
+    StreamBuffer upload_buffer;
+    std::vector<u8> download_buffer;
     OGLFramebuffer read_fbo, draw_fbo;
 };
 

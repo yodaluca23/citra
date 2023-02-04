@@ -74,16 +74,16 @@ Driver::Driver(bool gles, bool enable_debug) : is_gles{gles} {
     if (!gladLoadGL()) {
         return;
     }
+#endif
 
     /*
      * Qualcomm has some spammy info messages that are marked as errors but not important
      * https://developer.qualcomm.com/comment/11845
      */
-    if (!gles) {
+    if (enable_debug) {
         glEnable(GL_DEBUG_OUTPUT);
         glDebugMessageCallback(DebugHandler, nullptr);
     }
-#endif
 
     ReportDriverInfo();
     DeduceVendor();

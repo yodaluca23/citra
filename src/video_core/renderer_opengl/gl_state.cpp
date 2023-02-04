@@ -2,15 +2,13 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#include <glad/glad.h>
-#include "common/common_funcs.h"
-#include "common/logging/log.h"
+#include "common/common_types.h"
 #include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/renderer_opengl/gl_vars.h"
 
 namespace OpenGL {
 
-OpenGLState OpenGLState::cur_state;
+OpenGLState OpenGLState::cur_state{};
 
 OpenGLState::OpenGLState() {
     // These all match default OpenGL values

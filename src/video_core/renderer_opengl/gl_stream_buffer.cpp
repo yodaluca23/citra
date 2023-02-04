@@ -4,96 +4,107 @@
 
 #include "common/alignment.h"
 #include "common/assert.h"
-#include "common/microprofile.h"
 #include "video_core/renderer_opengl/gl_stream_buffer.h"
-
-MICROPROFILE_DEFINE(OpenGL_StreamBuffer, "OpenGL", "Stream Buffer Orphaning",
-                    MP_RGB(128, 128, 192));
 
 namespace OpenGL {
 
-OGLStreamBuffer::OGLStreamBuffer(GLenum target, GLsizeiptr size, bool readback_,
-                                 bool prefer_coherent)
-    : gl_target(target), readback(readback_), buffer_size(size) {
+StreamBuffer::StreamBuffer(GLenum target, size_t size_)
+    : gl_target{target}, buffer_size{size_}, slot_size{buffer_size / SYNC_POINTS},
+      buffer_storage{bool(GLAD_GL_ARB_buffer_storage)} {
+    for (int i = 0; i < SYNC_POINTS; i++) {
+        fences[i].Create();
+    }
+
     gl_buffer.Create();
     glBindBuffer(gl_target, gl_buffer.handle);
 
-    if (GLAD_GL_ARB_buffer_storage) {
-        persistent = true;
-        coherent = prefer_coherent;
-        GLbitfield flags = (readback ? GL_MAP_READ_BIT : GL_MAP_WRITE_BIT) | GL_MAP_PERSISTENT_BIT |
-                           (coherent ? GL_MAP_COHERENT_BIT : 0);
-        glBufferStorage(gl_target, size, nullptr, flags);
-        mapped_ptr = static_cast<u8*>(
-            glMapBufferRange(gl_target, 0, buffer_size,
-                             flags | (!coherent && !readback ? GL_MAP_FLUSH_EXPLICIT_BIT : 0)));
+    if (buffer_storage) {
+        glBufferStorage(gl_target, buffer_size, nullptr,
+                        GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+        mapped_ptr =
+            (u8*)glMapBufferRange(gl_target, 0, buffer_size,
+                                  GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
     } else {
-        glBufferData(gl_target, size, nullptr, GL_STREAM_DRAW);
+        glBufferData(gl_target, buffer_size, nullptr, GL_STREAM_DRAW);
     }
 }
 
-OGLStreamBuffer::~OGLStreamBuffer() {
-    if (persistent) {
+StreamBuffer::~StreamBuffer() {
+    if (buffer_storage) {
         glBindBuffer(gl_target, gl_buffer.handle);
         glUnmapBuffer(gl_target);
     }
-    gl_buffer.Release();
 }
 
-GLuint OGLStreamBuffer::GetHandle() const {
-    return gl_buffer.handle;
-}
-
-GLsizeiptr OGLStreamBuffer::GetSize() const {
-    return buffer_size;
-}
-
-std::tuple<u8*, GLintptr, bool> OGLStreamBuffer::Map(GLsizeiptr size, GLintptr alignment) {
-    ASSERT(size <= buffer_size);
-    ASSERT(alignment <= buffer_size);
+std::tuple<u8*, u64, bool> StreamBuffer::Map(u64 size, u64 alignment) {
     mapped_size = size;
 
     if (alignment > 0) {
-        buffer_pos = Common::AlignUp<std::size_t>(buffer_pos, alignment);
+        iterator = Common::AlignUp(iterator, alignment);
     }
 
+    // Insert waiting slots for used memory
+    for (u32 i = Slot(used_iterator); i < Slot(iterator); i++) {
+        fences[i].Create();
+    }
+    used_iterator = iterator;
+
+    // Wait for new slots to end of buffer
+    for (u32 i = Slot(free_iterator) + 1; i <= Slot(iterator + size) && i < SYNC_POINTS; i++) {
+        glClientWaitSync(fences[i].handle, GL_SYNC_FLUSH_COMMANDS_BIT, GL_TIMEOUT_IGNORED);
+        fences[i].Release();
+    }
+
+    // If we allocate a large amount of memory (A), commit a smaller amount, then allocate memory
+    // smaller than allocation A, we will have already waited for these fences in A, but not used
+    // the space. In this case, don't set m_free_iterator to a position before that which we know
+    // is safe to use, which would result in waiting on the same fence(s) next time.
+    if ((iterator + size) > free_iterator) {
+        free_iterator = iterator + size;
+    }
+
+    // If buffer is full
     bool invalidate = false;
-    if (buffer_pos + size > buffer_size) {
-        buffer_pos = 0;
+    if (iterator + size >= buffer_size) {
         invalidate = true;
 
-        if (persistent) {
-            glUnmapBuffer(gl_target);
+        // Insert waiting slots in unused space at the end of the buffer
+        for (int i = Slot(used_iterator); i < SYNC_POINTS; i++) {
+            fences[i].Create();
         }
+
+        // Move to the start
+        used_iterator = iterator = 0; // offset 0 is always aligned
+
+        // Wait for space at the start
+        for (int i = 0; i <= Slot(iterator + size); i++) {
+            glClientWaitSync(fences[i].handle, GL_SYNC_FLUSH_COMMANDS_BIT, GL_TIMEOUT_IGNORED);
+            fences[i].Release();
+        }
+        free_iterator = iterator + size;
     }
 
-    if (invalidate || !persistent) {
-        MICROPROFILE_SCOPE(OpenGL_StreamBuffer);
-        GLbitfield flags = (readback ? GL_MAP_READ_BIT : GL_MAP_WRITE_BIT) |
-                           (persistent ? GL_MAP_PERSISTENT_BIT : 0) |
-                           (coherent ? GL_MAP_COHERENT_BIT : 0) |
-                           (!coherent && !readback ? GL_MAP_FLUSH_EXPLICIT_BIT : 0) |
-                           (invalidate ? GL_MAP_INVALIDATE_BUFFER_BIT : GL_MAP_UNSYNCHRONIZED_BIT);
-        mapped_ptr = static_cast<u8*>(
-            glMapBufferRange(gl_target, buffer_pos, buffer_size - buffer_pos, flags));
-        mapped_offset = buffer_pos;
+    u8* pointer{};
+    if (buffer_storage) {
+        pointer = mapped_ptr + iterator;
+    } else {
+        pointer = (u8*)glMapBufferRange(gl_target, iterator, size,
+                                        GL_MAP_WRITE_BIT | GL_MAP_FLUSH_EXPLICIT_BIT |
+                                            GL_MAP_UNSYNCHRONIZED_BIT);
     }
 
-    return std::make_tuple(mapped_ptr + buffer_pos - mapped_offset, buffer_pos, invalidate);
+    return std::make_tuple(pointer, iterator, invalidate);
 }
 
-void OGLStreamBuffer::Unmap(GLsizeiptr size) {
-    ASSERT(size <= mapped_size);
+void StreamBuffer::Unmap(u64 used_size) {
+    ASSERT_MSG(used_size <= mapped_size, "Reserved size {} is too small compared to {}",
+               mapped_size, used_size);
 
-    if (!coherent && !readback && size > 0) {
-        glFlushMappedBufferRange(gl_target, buffer_pos - mapped_offset, size);
-    }
-
-    if (!persistent) {
+    if (!buffer_storage) {
+        glFlushMappedBufferRange(gl_target, 0, used_size);
         glUnmapBuffer(gl_target);
     }
-
-    buffer_pos += size;
+    iterator += used_size;
 }
 
 } // namespace OpenGL

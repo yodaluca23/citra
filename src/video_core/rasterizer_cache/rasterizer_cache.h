@@ -174,15 +174,13 @@ private:
     SurfaceMap dirty_regions;
     SurfaceSet remove_surfaces;
     u16 resolution_scale_factor;
-    std::vector<std::function<void()>> download_queue;
     std::unordered_map<TextureCubeConfig, Surface> texture_cube_cache;
 };
 
 template <class T>
 RasterizerCache<T>::RasterizerCache(Memory::MemorySystem& memory_, TextureRuntime& runtime_)
-    : memory{memory_}, runtime{runtime_} {
-    resolution_scale_factor = VideoCore::GetResolutionScaleFactor();
-}
+    : memory{memory_}, runtime{runtime_}, resolution_scale_factor{
+                                              VideoCore::GetResolutionScaleFactor()} {}
 
 template <class T>
 template <MatchFlags find_flags>
@@ -597,13 +595,15 @@ template <class T>
 auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> const Surface& {
     auto [it, new_surface] = texture_cube_cache.try_emplace(config);
     if (new_surface) {
-        SurfaceParams cube_params = {.addr = config.px,
-                                     .width = config.width,
-                                     .height = config.width,
-                                     .stride = config.width,
-                                     .texture_type = TextureType::CubeMap,
-                                     .pixel_format = PixelFormatFromTextureFormat(config.format),
-                                     .type = SurfaceType::Texture};
+        SurfaceParams cube_params = {
+            .addr = config.px,
+            .width = config.width,
+            .height = config.width,
+            .stride = config.width,
+            .texture_type = TextureType::CubeMap,
+            .pixel_format = PixelFormatFromTextureFormat(config.format),
+            .type = SurfaceType::Texture,
+        };
 
         it->second = CreateSurface(cube_params);
     }
@@ -915,6 +915,7 @@ void RasterizerCache<T>::UploadSurface(const Surface& surface, SurfaceInterval i
 
     const auto staging = runtime.FindStaging(
         load_info.width * load_info.height * surface->GetInternalBytesPerPixel(), true);
+
     MemoryRef source_ptr = memory.GetPhysicalRef(load_info.addr);
     if (!source_ptr) [[unlikely]] {
         return;
@@ -924,11 +925,12 @@ void RasterizerCache<T>::UploadSurface(const Surface& surface, SurfaceInterval i
     DecodeTexture(load_info, load_info.addr, load_info.end, upload_data, staging.mapped,
                   runtime.NeedsConvertion(surface->pixel_format));
 
-    const BufferTextureCopy upload = {.buffer_offset = 0,
-                                      .buffer_size = staging.size,
-                                      .texture_rect = surface->GetSubRect(load_info),
-                                      .texture_level = 0};
-
+    const BufferTextureCopy upload = {
+        .buffer_offset = 0,
+        .buffer_size = staging.size,
+        .texture_rect = surface->GetSubRect(load_info),
+        .texture_level = 0,
+    };
     surface->Upload(upload, staging);
 }
 
@@ -942,12 +944,16 @@ void RasterizerCache<T>::DownloadSurface(const Surface& surface, SurfaceInterval
 
     const auto staging = runtime.FindStaging(
         flush_info.width * flush_info.height * surface->GetInternalBytesPerPixel(), false);
-    const BufferTextureCopy download = {.buffer_offset = 0,
-                                        .buffer_size = staging.size,
-                                        .texture_rect = surface->GetSubRect(flush_info),
-                                        .texture_level = 0};
 
+    const BufferTextureCopy download = {
+        .buffer_offset = 0,
+        .buffer_size = staging.size,
+        .texture_rect = surface->GetSubRect(flush_info),
+        .texture_level = 0,
+    };
     surface->Download(download, staging);
+
+    runtime.Finish();
 
     MemoryRef dest_ptr = memory.GetPhysicalRef(flush_start);
     if (!dest_ptr) [[unlikely]] {
@@ -955,12 +961,8 @@ void RasterizerCache<T>::DownloadSurface(const Surface& surface, SurfaceInterval
     }
 
     const auto download_dest = dest_ptr.GetWriteBytes(flush_end - flush_start);
-
-    download_queue.push_back([this, surface, flush_start, flush_end, flush_info,
-                              mapped = staging.mapped, download_dest]() {
-        EncodeTexture(flush_info, flush_start, flush_end, mapped, download_dest,
-                      runtime.NeedsConvertion(surface->pixel_format));
-    });
+    EncodeTexture(flush_info, flush_start, flush_end, staging.mapped, download_dest,
+                  runtime.NeedsConvertion(surface->pixel_format));
 }
 
 template <class T>
@@ -1120,17 +1122,6 @@ void RasterizerCache<T>::FlushRegion(PAddr addr, u32 size, Surface flush_surface
         }
 
         flushed_intervals += interval;
-    }
-
-    // Batch execute all requested downloads. This gives more time for them to complete
-    // before we issue the CPU to GPU flush and reduces scheduler slot switches in Vulkan
-    if (!download_queue.empty()) {
-        runtime.Finish();
-        for (const auto& download_func : download_queue) {
-            download_func();
-        }
-
-        download_queue.clear();
     }
 
     // Reset dirty regions
