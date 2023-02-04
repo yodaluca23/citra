@@ -16,6 +16,10 @@ namespace Layout {
 struct FramebufferLayout;
 }
 
+namespace Memory {
+class MemorySystem;
+}
+
 namespace Frontend {
 
 struct Frame {
@@ -57,7 +61,8 @@ class RasterizerOpenGL;
 
 class RendererOpenGL : public RendererBase {
 public:
-    explicit RendererOpenGL(Frontend::EmuWindow& window, Frontend::EmuWindow* secondary_window);
+    explicit RendererOpenGL(Memory::MemorySystem& memory, Frontend::EmuWindow& window,
+                            Frontend::EmuWindow* secondary_window);
     ~RendererOpenGL() override;
 
     VideoCore::ResultStatus Init() override;
@@ -116,6 +121,7 @@ private:
     void LoadColorToActiveGLTexture(u8 color_r, u8 color_g, u8 color_b, const TextureInfo& texture);
 
 private:
+    Memory::MemorySystem& memory;
     Driver driver;
     OpenGLState state;
     std::unique_ptr<RasterizerOpenGL> rasterizer;

@@ -23,12 +23,19 @@ namespace Core {
 class TelemetrySession;
 }
 
+namespace Memory {
+class MemorySystem;
+}
+
 namespace Layout {
 struct FramebufferLayout;
 }
 
 namespace Vulkan {
 
+/**
+ * Structure used for storing information about the textures for each 3DS screen
+ **/
 struct TextureInfo {
     u32 width;
     u32 height;
@@ -38,6 +45,9 @@ struct TextureInfo {
     VmaAllocation allocation;
 };
 
+/**
+ * Structure used for storing information about the display target for each 3DS screen
+ **/
 struct ScreenInfo {
     TextureInfo texture;
     Common::Rectangle<f32> texcoords;
@@ -50,7 +60,8 @@ class RendererVulkan : public RendererBase {
     static constexpr std::size_t PRESENT_PIPELINES = 3;
 
 public:
-    explicit RendererVulkan(Frontend::EmuWindow& window, Frontend::EmuWindow* secondary_window);
+    explicit RendererVulkan(Memory::MemorySystem& memory, Frontend::EmuWindow& window,
+                            Frontend::EmuWindow* secondary_window);
     ~RendererVulkan() override;
 
     VideoCore::ResultStatus Init() override;
@@ -111,6 +122,7 @@ private:
     void LoadColorToActiveVkTexture(u8 color_r, u8 color_g, u8 color_b, const TextureInfo& texture);
 
 private:
+    Memory::MemorySystem& memory;
     Core::TelemetrySession& telemetry_session;
 
     Instance instance;

@@ -100,8 +100,9 @@ std::string BuildCommaSeparatedExtensions(std::vector<std::string> available_ext
 
 } // Anonymous namespace
 
-RendererVulkan::RendererVulkan(Frontend::EmuWindow& window, Frontend::EmuWindow* secondary_window)
-    : RendererBase{window, secondary_window},
+RendererVulkan::RendererVulkan(Memory::MemorySystem& memory_, Frontend::EmuWindow& window,
+                               Frontend::EmuWindow* secondary_window)
+    : RendererBase{window, secondary_window}, memory{memory_},
       telemetry_session{Core::System::GetInstance().TelemetrySession()},
       instance{window, Settings::values.physical_device.GetValue()}, scheduler{instance,
                                                                                renderpass_cache},
@@ -110,7 +111,8 @@ RendererVulkan::RendererVulkan(Frontend::EmuWindow& window, Frontend::EmuWindow*
                                                                               renderpass_cache},
       vertex_buffer{instance, scheduler, vk::BufferUsageFlagBits::eVertexBuffer,
                     VERTEX_BUFFER_SIZE},
-      rasterizer{render_window, instance, scheduler, desc_manager, runtime, renderpass_cache} {
+      rasterizer{memory,       render_window, instance,        scheduler,
+                 desc_manager, runtime,       renderpass_cache} {
     Report();
     window.mailbox = std::make_unique<TextureMailbox>(instance, swapchain, renderpass_cache);
 }

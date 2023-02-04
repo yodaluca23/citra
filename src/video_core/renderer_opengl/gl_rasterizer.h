@@ -11,6 +11,10 @@
 #include "video_core/renderer_opengl/gl_stream_buffer.h"
 #include "video_core/renderer_opengl/gl_texture_runtime.h"
 
+namespace Memory {
+class MemorySystem;
+}
+
 namespace Frontend {
 class EmuWindow;
 }
@@ -24,7 +28,8 @@ class ShaderProgramManager;
 
 class RasterizerOpenGL : public VideoCore::RasterizerAccelerated {
 public:
-    explicit RasterizerOpenGL(Frontend::EmuWindow& emu_window, Driver& driver);
+    explicit RasterizerOpenGL(Memory::MemorySystem& memory, Frontend::EmuWindow& emu_window,
+                              Driver& driver);
     ~RasterizerOpenGL() override;
 
     void LoadDiskResources(const std::atomic_bool& stop_loading,
@@ -35,6 +40,7 @@ public:
     void FlushRegion(PAddr addr, u32 size) override;
     void InvalidateRegion(PAddr addr, u32 size) override;
     void FlushAndInvalidateRegion(PAddr addr, u32 size) override;
+    void ClearAll(bool flush) override;
     bool AccelerateDisplayTransfer(const GPU::Regs::DisplayTransferConfig& config) override;
     bool AccelerateTextureCopy(const GPU::Regs::DisplayTransferConfig& config) override;
     bool AccelerateFill(const GPU::Regs::MemoryFillConfig& config) override;
@@ -132,6 +138,7 @@ private:
     bool SetupGeometryShader();
 
 private:
+    Memory::MemorySystem& memory;
     Driver& driver;
     OpenGLState state;
     TextureRuntime runtime;

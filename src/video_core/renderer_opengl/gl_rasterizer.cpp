@@ -13,7 +13,6 @@
 #include "video_core/renderer_opengl/gl_driver.h"
 #include "video_core/renderer_opengl/gl_rasterizer.h"
 #include "video_core/renderer_opengl/gl_shader_gen.h"
-#include "video_core/renderer_opengl/gl_vars.h"
 #include "video_core/renderer_opengl/pica_to_gl.h"
 #include "video_core/renderer_opengl/renderer_opengl.h"
 #include "video_core/video_core.h"
@@ -25,8 +24,9 @@ constexpr std::size_t INDEX_BUFFER_SIZE = 1 * 1024 * 1024;
 constexpr std::size_t UNIFORM_BUFFER_SIZE = 2 * 1024 * 1024;
 constexpr std::size_t TEXTURE_BUFFER_SIZE = 1 * 1024 * 1024;
 
-RasterizerOpenGL::RasterizerOpenGL(Frontend::EmuWindow& emu_window, Driver& driver)
-    : driver{driver}, runtime{driver}, res_cache{*this, runtime},
+RasterizerOpenGL::RasterizerOpenGL(Memory::MemorySystem& memory_, Frontend::EmuWindow& emu_window,
+                                   Driver& driver_)
+    : memory{memory_}, driver{driver_}, runtime{driver}, res_cache{memory, runtime},
       shader_program_manager{emu_window, driver, !driver.IsOpenGLES()},
       vertex_buffer{GL_ARRAY_BUFFER, VERTEX_BUFFER_SIZE}, uniform_buffer{GL_UNIFORM_BUFFER,
                                                                          UNIFORM_BUFFER_SIZE},
@@ -210,7 +210,7 @@ void RasterizerOpenGL::SetupVertexArray(u8* array_ptr, GLintptr buffer_offset,
         u32 data_size = loader.byte_count * vertex_num;
 
         res_cache.FlushRegion(data_addr, data_size, nullptr);
-        std::memcpy(array_ptr, VideoCore::g_memory->GetPhysicalPointer(data_addr), data_size);
+        std::memcpy(array_ptr, memory.GetPhysicalPointer(data_addr), data_size);
 
         array_ptr += data_size;
         buffer_offset += data_size;
@@ -326,9 +326,9 @@ bool RasterizerOpenGL::AccelerateDrawBatchInternal(bool is_indexed) {
             return false;
         }
 
-        const u8* index_data = VideoCore::g_memory->GetPhysicalPointer(
-            regs.pipeline.vertex_attributes.GetPhysicalBaseAddress() +
-            regs.pipeline.index_array.offset);
+        const u8* index_data =
+            memory.GetPhysicalPointer(regs.pipeline.vertex_attributes.GetPhysicalBaseAddress() +
+                                      regs.pipeline.index_array.offset);
         std::tie(buffer_ptr, buffer_offset, std::ignore) = index_buffer.Map(index_buffer_size, 4);
         std::memcpy(buffer_ptr, index_data, index_buffer_size);
         index_buffer.Unmap(index_buffer_size);
@@ -770,6 +770,10 @@ void RasterizerOpenGL::FlushAndInvalidateRegion(PAddr addr, u32 size) {
     MICROPROFILE_SCOPE(OpenGL_CacheManagement);
     res_cache.FlushRegion(addr, size);
     res_cache.InvalidateRegion(addr, size, nullptr);
+}
+
+void RasterizerOpenGL::ClearAll(bool flush) {
+    res_cache.ClearAll(flush);
 }
 
 MICROPROFILE_DEFINE(OpenGL_Blits, "OpenGL", "Blits", MP_RGB(100, 100, 255));

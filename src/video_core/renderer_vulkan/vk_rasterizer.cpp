@@ -57,11 +57,12 @@ struct DrawParams {
     return std::min(max_size, TEXTURE_BUFFER_SIZE);
 }
 
-RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instance& instance,
-                                   Scheduler& scheduler, DescriptorManager& desc_manager,
-                                   TextureRuntime& runtime, RenderpassCache& renderpass_cache)
-    : instance{instance}, scheduler{scheduler}, runtime{runtime},
-      renderpass_cache{renderpass_cache}, desc_manager{desc_manager}, res_cache{*this, runtime},
+RasterizerVulkan::RasterizerVulkan(Memory::MemorySystem& memory_, Frontend::EmuWindow& emu_window,
+                                   const Instance& instance, Scheduler& scheduler,
+                                   DescriptorManager& desc_manager, TextureRuntime& runtime,
+                                   RenderpassCache& renderpass_cache)
+    : memory{memory_}, instance{instance}, scheduler{scheduler}, runtime{runtime},
+      renderpass_cache{renderpass_cache}, desc_manager{desc_manager}, res_cache{memory, runtime},
       pipeline_cache{instance, scheduler, renderpass_cache, desc_manager},
       null_surface{NULL_PARAMS, vk::Format::eR8G8B8A8Unorm, NULL_USAGE,
                    vk::ImageAspectFlagBits::eColor, runtime},
@@ -235,7 +236,7 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
         const u32 data_size = loader.byte_count * vertex_num;
         res_cache.FlushRegion(data_addr, data_size);
 
-        const u8* src_ptr = VideoCore::g_memory->GetPhysicalPointer(data_addr);
+        const u8* src_ptr = memory.GetPhysicalPointer(data_addr);
         u8* dst_ptr = array_ptr + buffer_offset;
 
         // Align stride up if required by Vulkan implementation.
@@ -270,6 +271,9 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     // Bind the generated bindings
     scheduler.Record([this, binding_count = layout.binding_count,
                       vertex_offsets = binding_offsets](vk::CommandBuffer cmdbuf) {
+        for (auto& offset : vertex_offsets) {
+            ASSERT_MSG(offset != 0x8000000, "Bad offset");
+        }
         cmdbuf.bindVertexBuffers(0, binding_count, vertex_buffers.data(), vertex_offsets.data());
     });
 }
@@ -425,9 +429,9 @@ void RasterizerVulkan::SetupIndexArray() {
     const vk::IndexType index_type = native_u8 ? vk::IndexType::eUint8EXT : vk::IndexType::eUint16;
     const u32 index_buffer_size = regs.pipeline.num_vertices * (native_u8 ? 1 : 2);
 
-    const u8* index_data = VideoCore::g_memory->GetPhysicalPointer(
-        regs.pipeline.vertex_attributes.GetPhysicalBaseAddress() +
-        regs.pipeline.index_array.offset);
+    const u8* index_data =
+        memory.GetPhysicalPointer(regs.pipeline.vertex_attributes.GetPhysicalBaseAddress() +
+                                  regs.pipeline.index_array.offset);
 
     auto [index_ptr, index_offset, _] = stream_buffer.Map(index_buffer_size, 2);
     if (index_u8 && !native_u8) {
@@ -850,6 +854,10 @@ void RasterizerVulkan::FlushAndInvalidateRegion(PAddr addr, u32 size) {
     MICROPROFILE_SCOPE(Vulkan_CacheManagement);
     res_cache.FlushRegion(addr, size);
     res_cache.InvalidateRegion(addr, size, nullptr);
+}
+
+void RasterizerVulkan::ClearAll(bool flush) {
+    res_cache.ClearAll(flush);
 }
 
 MICROPROFILE_DEFINE(Vulkan_Blits, "Vulkan", "Blits", MP_RGB(100, 100, 255));

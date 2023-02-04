@@ -12,8 +12,8 @@
 #include "common/alignment.h"
 #include "common/logging/log.h"
 #include "common/microprofile.h"
+#include "core/memory.h"
 #include "video_core/pica_state.h"
-#include "video_core/rasterizer_accelerated.h"
 #include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/rasterizer_cache/surface_params.h"
 #include "video_core/rasterizer_cache/utils.h"
@@ -22,7 +22,7 @@
 
 namespace VideoCore {
 
-inline auto RangeFromInterval(auto& map, SurfaceInterval interval) {
+inline auto RangeFromInterval(auto& map, const auto& interval) {
     return boost::make_iterator_range(map.equal_range(interval));
 }
 
@@ -70,9 +70,10 @@ private:
 
     using SurfaceRect_Tuple = std::tuple<Surface, Common::Rectangle<u32>>;
     using SurfaceSurfaceRect_Tuple = std::tuple<Surface, Surface, Common::Rectangle<u32>>;
+    using PageMap = boost::icl::interval_map<u32, int>;
 
 public:
-    RasterizerCache(VideoCore::RasterizerAccelerated& rasterizer, TextureRuntime& runtime);
+    RasterizerCache(Memory::MemorySystem& memory, TextureRuntime& runtime);
     ~RasterizerCache() = default;
 
     /// Get the best surface match (and its match type) for the given flags
@@ -124,6 +125,9 @@ public:
     /// Flush all cached resources tracked by this cache manager
     void FlushAll();
 
+    /// Clear all cached resources tracked by this cache manager
+    void ClearAll(bool flush);
+
 private:
     void DuplicateSurface(const Surface& src_surface, const Surface& dest_surface);
 
@@ -159,23 +163,24 @@ private:
     /// Remove surface from the cache
     void UnregisterSurface(const Surface& surface);
 
+    /// Increase/decrease the number of surface in pages touching the specified region
+    void UpdatePagesCachedCount(PAddr addr, u32 size, int delta);
+
 private:
-    VideoCore::RasterizerAccelerated& rasterizer;
+    Memory::MemorySystem& memory;
     TextureRuntime& runtime;
     SurfaceCache surface_cache;
+    PageMap cached_pages;
     SurfaceMap dirty_regions;
     SurfaceSet remove_surfaces;
     u16 resolution_scale_factor;
     std::vector<std::function<void()>> download_queue;
-    std::vector<u8> staging_buffer;
     std::unordered_map<TextureCubeConfig, Surface> texture_cube_cache;
-    std::recursive_mutex mutex;
 };
 
 template <class T>
-RasterizerCache<T>::RasterizerCache(VideoCore::RasterizerAccelerated& rasterizer,
-                                    TextureRuntime& runtime)
-    : rasterizer{rasterizer}, runtime{runtime} {
+RasterizerCache<T>::RasterizerCache(Memory::MemorySystem& memory_, TextureRuntime& runtime_)
+    : memory{memory_}, runtime{runtime_} {
     resolution_scale_factor = VideoCore::GetResolutionScaleFactor();
 }
 
@@ -910,7 +915,7 @@ void RasterizerCache<T>::UploadSurface(const Surface& surface, SurfaceInterval i
 
     const auto staging = runtime.FindStaging(
         load_info.width * load_info.height * surface->GetInternalBytesPerPixel(), true);
-    MemoryRef source_ptr = VideoCore::g_memory->GetPhysicalRef(load_info.addr);
+    MemoryRef source_ptr = memory.GetPhysicalRef(load_info.addr);
     if (!source_ptr) [[unlikely]] {
         return;
     }
@@ -944,7 +949,7 @@ void RasterizerCache<T>::DownloadSurface(const Surface& surface, SurfaceInterval
 
     surface->Download(download, staging);
 
-    MemoryRef dest_ptr = VideoCore::g_memory->GetPhysicalRef(flush_start);
+    MemoryRef dest_ptr = memory.GetPhysicalRef(flush_start);
     if (!dest_ptr) [[unlikely]] {
         return;
     }
@@ -964,7 +969,7 @@ void RasterizerCache<T>::DownloadFillSurface(const Surface& surface, SurfaceInte
     const u32 flush_end = boost::icl::last_next(interval);
     ASSERT(flush_start >= surface->addr && flush_end <= surface->end);
 
-    MemoryRef dest_ptr = VideoCore::g_memory->GetPhysicalRef(flush_start);
+    MemoryRef dest_ptr = memory.GetPhysicalRef(flush_start);
     if (!dest_ptr) [[unlikely]] {
         return;
     }
@@ -1062,9 +1067,32 @@ bool RasterizerCache<T>::ValidateByReinterpretation(const Surface& surface, Surf
 }
 
 template <class T>
-void RasterizerCache<T>::FlushRegion(PAddr addr, u32 size, Surface flush_surface) {
-    std::lock_guard lock{mutex};
+void RasterizerCache<T>::ClearAll(bool flush) {
+    const auto flush_interval = PageMap::interval_type::right_open(0x0, 0xFFFFFFFF);
+    // Force flush all surfaces from the cache
+    if (flush) {
+        FlushRegion(0x0, 0xFFFFFFFF);
+    }
+    // Unmark all of the marked pages
+    for (auto& pair : RangeFromInterval(cached_pages, flush_interval)) {
+        const auto interval = pair.first & flush_interval;
 
+        const PAddr interval_start_addr = boost::icl::first(interval) << Memory::CITRA_PAGE_BITS;
+        const PAddr interval_end_addr = boost::icl::last_next(interval) << Memory::CITRA_PAGE_BITS;
+        const u32 interval_size = interval_end_addr - interval_start_addr;
+
+        memory.RasterizerMarkRegionCached(interval_start_addr, interval_size, false);
+    }
+
+    // Remove the whole cache without really looking at it.
+    cached_pages -= flush_interval;
+    dirty_regions -= SurfaceInterval(0x0, 0xFFFFFFFF);
+    surface_cache -= SurfaceInterval(0x0, 0xFFFFFFFF);
+    remove_surfaces.clear();
+}
+
+template <class T>
+void RasterizerCache<T>::FlushRegion(PAddr addr, u32 size, Surface flush_surface) {
     if (size == 0) [[unlikely]] {
         return;
     }
@@ -1116,8 +1144,6 @@ void RasterizerCache<T>::FlushAll() {
 
 template <class T>
 void RasterizerCache<T>::InvalidateRegion(PAddr addr, u32 size, const Surface& region_owner) {
-    std::lock_guard lock{mutex};
-
     if (size == 0) [[unlikely]] {
         return;
     }
@@ -1189,28 +1215,60 @@ auto RasterizerCache<T>::CreateSurface(SurfaceParams& params) -> Surface {
 
 template <class T>
 void RasterizerCache<T>::RegisterSurface(const Surface& surface) {
-    std::lock_guard lock{mutex};
-
     if (surface->registered) {
         return;
     }
 
     surface->registered = true;
     surface_cache.add({surface->GetInterval(), SurfaceSet{surface}});
-    rasterizer.UpdatePagesCachedCount(surface->addr, surface->size, 1);
+    UpdatePagesCachedCount(surface->addr, surface->size, 1);
 }
 
 template <class T>
 void RasterizerCache<T>::UnregisterSurface(const Surface& surface) {
-    std::lock_guard lock{mutex};
-
     if (!surface->registered) {
         return;
     }
 
     surface->registered = false;
-    rasterizer.UpdatePagesCachedCount(surface->addr, surface->size, -1);
+    UpdatePagesCachedCount(surface->addr, surface->size, -1);
     surface_cache.subtract({surface->GetInterval(), SurfaceSet{surface}});
+}
+
+template <class T>
+void RasterizerCache<T>::UpdatePagesCachedCount(PAddr addr, u32 size, int delta) {
+    const u32 num_pages =
+        ((addr + size - 1) >> Memory::CITRA_PAGE_BITS) - (addr >> Memory::CITRA_PAGE_BITS) + 1;
+    const u32 page_start = addr >> Memory::CITRA_PAGE_BITS;
+    const u32 page_end = page_start + num_pages;
+
+    // Interval maps will erase segments if count reaches 0, so if delta is negative we have to
+    // subtract after iterating
+    const auto pages_interval = PageMap::interval_type::right_open(page_start, page_end);
+    if (delta > 0) {
+        cached_pages.add({pages_interval, delta});
+    }
+
+    for (const auto& pair : RangeFromInterval(cached_pages, pages_interval)) {
+        const auto interval = pair.first & pages_interval;
+        const int count = pair.second;
+
+        const PAddr interval_start_addr = boost::icl::first(interval) << Memory::CITRA_PAGE_BITS;
+        const PAddr interval_end_addr = boost::icl::last_next(interval) << Memory::CITRA_PAGE_BITS;
+        const u32 interval_size = interval_end_addr - interval_start_addr;
+
+        if (delta > 0 && count == delta) {
+            memory.RasterizerMarkRegionCached(interval_start_addr, interval_size, true);
+        } else if (delta < 0 && count == -delta) {
+            memory.RasterizerMarkRegionCached(interval_start_addr, interval_size, false);
+        } else {
+            ASSERT(count >= 0);
+        }
+    }
+
+    if (delta < 0) {
+        cached_pages.add({pages_interval, delta});
+    }
 }
 
 } // namespace VideoCore

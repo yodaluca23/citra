@@ -273,10 +273,11 @@ static std::array<GLfloat, 3 * 2> MakeOrthographicMatrix(const float width, cons
     return matrix;
 }
 
-RendererOpenGL::RendererOpenGL(Frontend::EmuWindow& window, Frontend::EmuWindow* secondary_window)
-    : RendererBase{window, secondary_window}, driver{Settings::values.graphics_api.GetValue() ==
-                                                         Settings::GraphicsAPI::OpenGLES,
-                                                     Settings::values.renderer_debug.GetValue()},
+RendererOpenGL::RendererOpenGL(Memory::MemorySystem& memory_, Frontend::EmuWindow& window,
+                               Frontend::EmuWindow* secondary_window)
+    : RendererBase{window, secondary_window}, memory{memory_},
+      driver{Settings::values.graphics_api.GetValue() == Settings::GraphicsAPI::OpenGLES,
+             Settings::values.renderer_debug.GetValue()},
       frame_dumper(Core::System::GetInstance().VideoDumper(), window) {
     window.mailbox = std::make_unique<OGLTextureMailbox>();
     if (secondary_window) {
@@ -294,7 +295,7 @@ VideoCore::ResultStatus RendererOpenGL::Init() {
     }
 
     InitOpenGLObjects();
-    rasterizer = std::make_unique<RasterizerOpenGL>(render_window, driver);
+    rasterizer = std::make_unique<RasterizerOpenGL>(memory, render_window, driver);
 
     return VideoCore::ResultStatus::Success;
 }
@@ -495,8 +496,7 @@ void RendererOpenGL::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& fram
         screen_info.display_texcoords = Common::Rectangle<float>(0.f, 0.f, 1.f, 1.f);
 
         Memory::RasterizerFlushRegion(framebuffer_addr, framebuffer.stride * framebuffer.height);
-
-        const u8* framebuffer_data = VideoCore::g_memory->GetPhysicalPointer(framebuffer_addr);
+        const u8* framebuffer_data = memory.GetPhysicalPointer(framebuffer_addr);
 
         state.texture_units[0].texture_2d = screen_info.texture.resource.handle;
         state.Apply();

@@ -18,18 +18,13 @@ public:
 
     void AddTriangle(const Pica::Shader::OutputVertex& v0, const Pica::Shader::OutputVertex& v1,
                      const Pica::Shader::OutputVertex& v2) override;
-
-    void UpdatePagesCachedCount(PAddr addr, u32 size, int delta) override;
     void NotifyPicaRegisterChanged(u32 id) override;
-    void ClearAll(bool flush) override;
-
-    /// Syncs entire status to match PICA registers
     void SyncEntireState() override;
 
+protected:
     /// Sync fixed-function pipeline state
     virtual void SyncFixedState() = 0;
 
-protected:
     /// Notifies that a fixed function PICA register changed to the video backend
     virtual void NotifyFixedFunctionPicaRegisterChanged(u32 id) = 0;
 
@@ -137,7 +132,6 @@ protected:
     VertexArrayInfo AnalyzeVertexArray(bool is_indexed, u32 stride_alignment = 1);
 
 protected:
-    std::array<u16, 0x30000> cached_pages{};
     std::vector<HardwareVertex> vertex_batch;
     bool shader_dirty = true;
 

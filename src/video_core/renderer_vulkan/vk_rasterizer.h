@@ -15,6 +15,10 @@ namespace Frontend {
 class EmuWindow;
 }
 
+namespace Memory {
+class MemorySystem;
+}
+
 namespace Vulkan {
 
 struct ScreenInfo;
@@ -58,9 +62,10 @@ class RasterizerVulkan : public VideoCore::RasterizerAccelerated {
     friend class RendererVulkan;
 
 public:
-    explicit RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instance& instance,
-                              Scheduler& scheduler, DescriptorManager& desc_manager,
-                              TextureRuntime& runtime, RenderpassCache& renderpass_cache);
+    explicit RasterizerVulkan(Memory::MemorySystem& memory, Frontend::EmuWindow& emu_window,
+                              const Instance& instance, Scheduler& scheduler,
+                              DescriptorManager& desc_manager, TextureRuntime& runtime,
+                              RenderpassCache& renderpass_cache);
     ~RasterizerVulkan() override;
 
     void LoadDiskResources(const std::atomic_bool& stop_loading,
@@ -71,6 +76,7 @@ public:
     void FlushRegion(PAddr addr, u32 size) override;
     void InvalidateRegion(PAddr addr, u32 size) override;
     void FlushAndInvalidateRegion(PAddr addr, u32 size) override;
+    void ClearAll(bool flush) override;
     bool AccelerateDisplayTransfer(const GPU::Regs::DisplayTransferConfig& config) override;
     bool AccelerateTextureCopy(const GPU::Regs::DisplayTransferConfig& config) override;
     bool AccelerateFill(const GPU::Regs::MemoryFillConfig& config) override;
@@ -151,6 +157,7 @@ private:
     vk::Sampler CreateSampler(const SamplerInfo& info);
 
 private:
+    Memory::MemorySystem& memory;
     const Instance& instance;
     Scheduler& scheduler;
     TextureRuntime& runtime;
