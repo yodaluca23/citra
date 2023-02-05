@@ -54,6 +54,7 @@ struct ScreenInfo {
     vk::ImageView image_view;
 };
 
+struct Frame;
 class PresentMailbox;
 
 class RendererVulkan : public VideoCore::RendererBase {
@@ -89,12 +90,12 @@ private:
     void RenderScreenshot();
     void RenderToMailbox(const Layout::FramebufferLayout& layout,
                          std::unique_ptr<PresentMailbox>& mailbox, bool flipped);
-    void BeginRendering();
+    void BeginRendering(Frame* frame);
 
     /**
-     * Draws the emulated screens to the emulator window.
+     * Draws the emulated screens to the render frame.
      */
-    void DrawScreens(const Layout::FramebufferLayout& layout, bool flipped);
+    void DrawScreens(Frame* frame, const Layout::FramebufferLayout& layout, bool flipped);
 
     /**
      * Draws a single texture to the emulator window.

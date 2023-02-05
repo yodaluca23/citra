@@ -213,9 +213,31 @@ void RendererVulkan::RenderToMailbox(const Layout::FramebufferLayout& layout,
         cmdbuf.setScissor(0, scissor);
     });
 
+    DrawScreens(frame, layout, flipped);
+
+    scheduler.Flush(frame->render_ready);
+    scheduler.Record([&mailbox, frame](vk::CommandBuffer) { mailbox->Present(frame); });
+    scheduler.DispatchWork();
+}
+
+void RendererVulkan::BeginRendering(Frame* frame) {
+    for (std::size_t i = 0; i < screen_infos.size(); i++) {
+        const auto& info = screen_infos[i];
+        present_textures[i] = vk::DescriptorImageInfo{
+            .imageView = info.image_view,
+            .imageLayout = vk::ImageLayout::eGeneral,
+        };
+    }
+    present_textures[3].sampler = present_samplers[current_sampler];
+
+    vk::DescriptorSet set = desc_manager.AllocateSet(present_descriptor_layout);
+    instance.GetDevice().updateDescriptorSetWithTemplate(set, present_update_template,
+                                                         present_textures[0]);
+
     renderpass_cache.ExitRenderpass();
     scheduler.Record([this, framebuffer = frame->framebuffer, width = frame->width,
-                      height = frame->height](vk::CommandBuffer cmdbuf) {
+                      height = frame->height, set,
+                      pipeline_index = current_pipeline](vk::CommandBuffer cmdbuf) {
         const vk::ClearValue clear{.color = clear_color};
         const vk::RenderPassBeginInfo renderpass_begin_info = {
             .renderPass = renderpass_cache.GetPresentRenderpass(),
@@ -230,32 +252,7 @@ void RendererVulkan::RenderToMailbox(const Layout::FramebufferLayout& layout,
         };
 
         cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
-    });
-
-    DrawScreens(layout, flipped);
-
-    scheduler.Flush(frame->render_ready);
-    scheduler.Record([&mailbox, frame](vk::CommandBuffer) { mailbox->Present(frame); });
-    scheduler.DispatchWork();
-}
-
-void RendererVulkan::BeginRendering() {
-    for (std::size_t i = 0; i < screen_infos.size(); i++) {
-        const auto& info = screen_infos[i];
-        present_textures[i] = vk::DescriptorImageInfo{
-            .imageView = info.image_view,
-            .imageLayout = vk::ImageLayout::eGeneral,
-        };
-    }
-    present_textures[3].sampler = present_samplers[current_sampler];
-
-    vk::DescriptorSet set = desc_manager.AllocateSet(present_descriptor_layout);
-    instance.GetDevice().updateDescriptorSetWithTemplate(set, present_update_template,
-                                                         present_textures[0]);
-
-    scheduler.Record([this, set, pipeline_index = current_pipeline](vk::CommandBuffer cmdbuf) {
         cmdbuf.bindPipeline(vk::PipelineBindPoint::eGraphics, present_pipelines[pipeline_index]);
-
         cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, present_pipeline_layout, 0, set,
                                   {});
     });
@@ -808,7 +805,8 @@ void RendererVulkan::DrawSingleScreenStereo(u32 screen_id_l, u32 screen_id_r, fl
     });
 }
 
-void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool flipped) {
+void RendererVulkan::DrawScreens(Frame* frame, const Layout::FramebufferLayout& layout,
+                                 bool flipped) {
     if (settings.bg_color_update_requested.exchange(false)) {
         clear_color.float32[0] = Settings::values.bg_red.GetValue();
         clear_color.float32[1] = Settings::values.bg_green.GetValue();
@@ -837,7 +835,7 @@ void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool f
                                       render_3d == Settings::StereoRenderOption::ReverseInterlaced;
 
     // Bind necessary state before drawing the screens
-    BeginRendering();
+    BeginRendering(frame);
 
     draw_info.layer = 0;
     if (layout.top_screen_enabled) {
@@ -1028,26 +1026,7 @@ void RendererVulkan::RenderScreenshot() {
     Frame frame{};
     mailbox->ReloadFrame(&frame, width, height);
 
-    renderpass_cache.ExitRenderpass();
-    scheduler.Record([this, framebuffer = frame.framebuffer, width = frame.width,
-                      height = frame.height](vk::CommandBuffer cmdbuf) {
-        const vk::ClearValue clear{.color = clear_color};
-        const vk::RenderPassBeginInfo renderpass_begin_info = {
-            .renderPass = renderpass_cache.GetPresentRenderpass(),
-            .framebuffer = framebuffer,
-            .renderArea =
-                vk::Rect2D{
-                    .offset = {0, 0},
-                    .extent = {width, height},
-                },
-            .clearValueCount = 1,
-            .pClearValues = &clear,
-        };
-
-        cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
-    });
-
-    DrawScreens(layout, false);
+    DrawScreens(&frame, layout, false);
 
     scheduler.Record(
         [width, height, source_image = frame.image, staging_image](vk::CommandBuffer cmdbuf) {
