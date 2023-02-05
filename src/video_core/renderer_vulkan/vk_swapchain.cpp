@@ -30,6 +30,7 @@ Swapchain::~Swapchain() {
 }
 
 void Swapchain::Create(vk::SurfaceKHR new_surface) {
+    needs_recreation = true; ///< Set this for the present thread to wait on
     Destroy();
 
     if (new_surface) {

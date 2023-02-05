@@ -5,12 +5,18 @@
 #include <condition_variable>
 #include <mutex>
 #include <queue>
-#include "core/frontend/emu_window.h"
+#include "common/polyfill_thread.h"
+#include "common/threadsafe_queue.h"
 #include "video_core/renderer_vulkan/vk_common.h"
 
 VK_DEFINE_HANDLE(VmaAllocation)
 
-namespace Frontend {
+namespace Vulkan {
+
+class Instance;
+class Swapchain;
+class Scheduler;
+class RenderpassCache;
 
 struct Frame {
     u32 width{};
@@ -25,42 +31,36 @@ struct Frame {
     vk::CommandBuffer cmdbuf{};
 };
 
-} // namespace Frontend
-
-namespace Vulkan {
-
-class Instance;
-class Swapchain;
-class RenderpassCache;
-
-class TextureMailbox final : public Frontend::TextureMailbox {
-    static constexpr std::size_t SWAP_CHAIN_SIZE = 8;
+class PresentMailbox final {
+    static constexpr std::size_t SWAP_CHAIN_SIZE = 6;
 
 public:
-    TextureMailbox(const Instance& instance, const Swapchain& swapchain,
-                   const RenderpassCache& renderpass_cache);
-    ~TextureMailbox() override;
+    PresentMailbox(const Instance& instance, Swapchain& swapchain, Scheduler& scheduler,
+                   RenderpassCache& renderpass_cache);
+    ~PresentMailbox();
 
-    void ReloadRenderFrame(Frontend::Frame* frame, u32 width, u32 height) override;
+    Frame* GetRenderFrame();
+    void UpdateSurface(vk::SurfaceKHR surface);
+    void ReloadFrame(Frame* frame, u32 width, u32 height);
+    void Present(Frame* frame);
 
-    Frontend::Frame* GetRenderFrame() override;
-    Frontend::Frame* TryGetPresentFrame(int timeout_ms) override;
-
-    void ReleaseRenderFrame(Frontend::Frame* frame) override;
-    void ReleasePresentFrame(Frontend::Frame* frame) override;
+private:
+    void PresentThread(std::stop_token token);
+    void CopyToSwapchain(Frame* frame);
 
 private:
     const Instance& instance;
-    const Swapchain& swapchain;
-    const RenderpassCache& renderpass_cache;
+    Swapchain& swapchain;
+    Scheduler& scheduler;
+    RenderpassCache& renderpass_cache;
     vk::CommandPool command_pool;
-    std::mutex free_mutex;
-    std::mutex present_mutex;
-    std::condition_variable free_cv;
-    std::condition_variable present_cv;
-    std::array<Frontend::Frame, SWAP_CHAIN_SIZE> swap_chain{};
-    std::queue<Frontend::Frame*> free_queue{};
-    std::queue<Frontend::Frame*> present_queue{};
+    vk::Queue graphics_queue;
+    std::jthread present_thread;
+    std::array<Frame, SWAP_CHAIN_SIZE> swap_chain{};
+    Common::SPSCQueue<Frame*> free_queue{};
+    Common::SPSCQueue<Frame*, true> present_queue{};
+    std::mutex swapchain_mutex;
+    std::condition_variable swapchain_cv;
 };
 
 } // namespace Vulkan

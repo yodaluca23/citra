@@ -11,7 +11,7 @@ namespace OpenGL {
 StreamBuffer::StreamBuffer(GLenum target, size_t size_)
     : gl_target{target}, buffer_size{size_}, slot_size{buffer_size / SYNC_POINTS},
       buffer_storage{bool(GLAD_GL_ARB_buffer_storage)} {
-    for (int i = 0; i < SYNC_POINTS; i++) {
+    for (u64 i = 0; i < SYNC_POINTS; i++) {
         fences[i].Create();
     }
 
@@ -44,13 +44,13 @@ std::tuple<u8*, u64, bool> StreamBuffer::Map(u64 size, u64 alignment) {
     }
 
     // Insert waiting slots for used memory
-    for (u32 i = Slot(used_iterator); i < Slot(iterator); i++) {
+    for (u64 i = Slot(used_iterator); i < Slot(iterator); i++) {
         fences[i].Create();
     }
     used_iterator = iterator;
 
     // Wait for new slots to end of buffer
-    for (u32 i = Slot(free_iterator) + 1; i <= Slot(iterator + size) && i < SYNC_POINTS; i++) {
+    for (u64 i = Slot(free_iterator) + 1; i <= Slot(iterator + size) && i < SYNC_POINTS; i++) {
         glClientWaitSync(fences[i].handle, GL_SYNC_FLUSH_COMMANDS_BIT, GL_TIMEOUT_IGNORED);
         fences[i].Release();
     }
@@ -69,7 +69,7 @@ std::tuple<u8*, u64, bool> StreamBuffer::Map(u64 size, u64 alignment) {
         invalidate = true;
 
         // Insert waiting slots in unused space at the end of the buffer
-        for (int i = Slot(used_iterator); i < SYNC_POINTS; i++) {
+        for (u64 i = Slot(used_iterator); i < SYNC_POINTS; i++) {
             fences[i].Create();
         }
 
@@ -77,7 +77,7 @@ std::tuple<u8*, u64, bool> StreamBuffer::Map(u64 size, u64 alignment) {
         used_iterator = iterator = 0; // offset 0 is always aligned
 
         // Wait for space at the start
-        for (int i = 0; i <= Slot(iterator + size); i++) {
+        for (u64 i = 0; i <= Slot(iterator + size); i++) {
             glClientWaitSync(fences[i].handle, GL_SYNC_FLUSH_COMMANDS_BIT, GL_TIMEOUT_IGNORED);
             fences[i].Release();
         }

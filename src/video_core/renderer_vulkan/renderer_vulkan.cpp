@@ -28,7 +28,6 @@
 #include <vk_mem_alloc.h>
 
 MICROPROFILE_DEFINE(Vulkan_RenderFrame, "Vulkan", "Render Frame", MP_RGB(128, 128, 64));
-MICROPROFILE_DEFINE(Vulkan_SwapchainCopy, "Vulkan", "Swapchain Copy", MP_RGB(64, 64, 0));
 
 namespace Vulkan {
 
@@ -117,7 +116,7 @@ RendererVulkan::RendererVulkan(Memory::MemorySystem& memory_, Frontend::EmuWindo
     CompileShaders();
     BuildLayouts();
     BuildPipelines();
-    window.mailbox = std::make_unique<TextureMailbox>(instance, swapchain, renderpass_cache);
+    mailbox = std::make_unique<PresentMailbox>(instance, swapchain, scheduler, renderpass_cache);
 }
 
 RendererVulkan::~RendererVulkan() {
@@ -186,14 +185,13 @@ void RendererVulkan::PrepareRendertarget() {
 }
 
 void RendererVulkan::RenderToMailbox(const Layout::FramebufferLayout& layout,
-                                     std::unique_ptr<Frontend::TextureMailbox>& mailbox,
-                                     bool flipped) {
-    Frontend::Frame* frame = mailbox->GetRenderFrame();
+                                     std::unique_ptr<PresentMailbox>& mailbox, bool flipped) {
+    Frame* frame = mailbox->GetRenderFrame();
     MICROPROFILE_SCOPE(Vulkan_RenderFrame);
 
     const auto [width, height] = swapchain.GetExtent();
     if (width != frame->width || height != frame->height) {
-        mailbox->ReloadRenderFrame(frame, width, height);
+        mailbox->ReloadFrame(frame, width, height);
     }
 
     scheduler.Record([layout](vk::CommandBuffer cmdbuf) {
@@ -237,7 +235,7 @@ void RendererVulkan::RenderToMailbox(const Layout::FramebufferLayout& layout,
     DrawScreens(layout, flipped);
 
     scheduler.Flush(frame->render_ready);
-    scheduler.Record([&mailbox, frame](vk::CommandBuffer) { mailbox->ReleaseRenderFrame(frame); });
+    scheduler.Record([&mailbox, frame](vk::CommandBuffer) { mailbox->Present(frame); });
     scheduler.DispatchWork();
 }
 
@@ -956,165 +954,12 @@ void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool f
     scheduler.Record([](vk::CommandBuffer cmdbuf) { cmdbuf.endRenderPass(); });
 }
 
-void RendererVulkan::TryPresent(int timeout_ms, bool is_secondary) {
-    Frontend::Frame* frame = render_window.mailbox->TryGetPresentFrame(timeout_ms);
-    if (!frame) {
-        LOG_DEBUG(Render_Vulkan, "TryGetPresentFrame returned no frame to present");
-        return;
-    }
-
-#if ANDROID
-    // On Android swapchain invalidations are always due to surface changes.
-    // These are processed on the main thread so wait for it to recreate
-    // the swapchain for us.
-    std::unique_lock lock{swapchain_mutex};
-    swapchain_cv.wait(lock, [this]() { return !swapchain.NeedsRecreation(); });
-#endif
-
-    while (!swapchain.AcquireNextImage()) {
-#if ANDROID
-        swapchain_cv.wait(lock, [this]() { return !swapchain.NeedsRecreation(); });
-#else
-        std::scoped_lock lock{scheduler.QueueMutex()};
-        instance.GetGraphicsQueue().waitIdle();
-        swapchain.Create();
-#endif
-    }
-
-    {
-        MICROPROFILE_SCOPE(Vulkan_SwapchainCopy);
-        const vk::Image swapchain_image = swapchain.Image();
-
-        const vk::CommandBufferBeginInfo begin_info = {
-            .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
-        };
-        const vk::CommandBuffer cmdbuf = frame->cmdbuf;
-        cmdbuf.begin(begin_info);
-
-        const auto [width, height] = swapchain.GetExtent();
-        const u32 copy_width = std::min(width, frame->width);
-        const u32 copy_height = std::min(height, frame->height);
-
-        const vk::ImageCopy image_copy = {
-            .srcSubresource{
-                .aspectMask = vk::ImageAspectFlagBits::eColor,
-                .mipLevel = 0,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            },
-            .srcOffset = {0, 0, 0},
-            .dstSubresource{
-                .aspectMask = vk::ImageAspectFlagBits::eColor,
-                .mipLevel = 0,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            },
-            .dstOffset = {0, 0, 0},
-            .extent = {copy_width, copy_height, 1},
-        };
-
-        const std::array pre_barriers{
-            vk::ImageMemoryBarrier{
-                .srcAccessMask = vk::AccessFlagBits::eNone,
-                .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
-                .oldLayout = vk::ImageLayout::eUndefined,
-                .newLayout = vk::ImageLayout::eTransferDstOptimal,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = swapchain_image,
-                .subresourceRange{
-                    .aspectMask = vk::ImageAspectFlagBits::eColor,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                },
-            },
-            vk::ImageMemoryBarrier{
-                .srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite,
-                .dstAccessMask = vk::AccessFlagBits::eTransferRead,
-                .oldLayout = vk::ImageLayout::eTransferSrcOptimal,
-                .newLayout = vk::ImageLayout::eTransferSrcOptimal,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = frame->image,
-                .subresourceRange{
-                    .aspectMask = vk::ImageAspectFlagBits::eColor,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                },
-            },
-        };
-        const vk::ImageMemoryBarrier post_barrier{
-            .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
-            .dstAccessMask = vk::AccessFlagBits::eNone,
-            .oldLayout = vk::ImageLayout::eTransferDstOptimal,
-            .newLayout = vk::ImageLayout::ePresentSrcKHR,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = swapchain_image,
-            .subresourceRange{
-                .aspectMask = vk::ImageAspectFlagBits::eColor,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = VK_REMAINING_ARRAY_LAYERS,
-            },
-        };
-
-        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eColorAttachmentOutput,
-                               vk::PipelineStageFlagBits::eTransfer,
-                               vk::DependencyFlagBits::eByRegion, {}, {}, pre_barriers);
-
-        cmdbuf.copyImage(frame->image, vk::ImageLayout::eTransferSrcOptimal, swapchain_image,
-                         vk::ImageLayout::eTransferDstOptimal, image_copy);
-
-        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                               vk::PipelineStageFlagBits::eBottomOfPipe,
-                               vk::DependencyFlagBits::eByRegion, {}, {}, post_barrier);
-
-        cmdbuf.end();
-
-        static constexpr std::array<vk::PipelineStageFlags, 2> wait_stage_masks = {
-            vk::PipelineStageFlagBits::eAllCommands,
-            vk::PipelineStageFlagBits::eAllCommands,
-        };
-
-        const vk::Semaphore present_ready = swapchain.GetPresentReadySemaphore();
-        const vk::Semaphore image_acquired = swapchain.GetImageAcquiredSemaphore();
-        const std::array wait_semaphores = {image_acquired, frame->render_ready};
-
-        vk::SubmitInfo submit_info = {
-            .waitSemaphoreCount = static_cast<u32>(wait_semaphores.size()),
-            .pWaitSemaphores = wait_semaphores.data(),
-            .pWaitDstStageMask = wait_stage_masks.data(),
-            .commandBufferCount = 1u,
-            .pCommandBuffers = &cmdbuf,
-            .signalSemaphoreCount = 1,
-            .pSignalSemaphores = &present_ready,
-        };
-
-        try {
-            std::scoped_lock lock{scheduler.QueueMutex(), frame->fence_mutex};
-            instance.GetGraphicsQueue().submit(submit_info, frame->present_done);
-        } catch (vk::DeviceLostError& err) {
-            LOG_CRITICAL(Render_Vulkan, "Device lost during present submit: {}", err.what());
-            UNREACHABLE();
-        }
-    }
-
-    swapchain.Present();
-    render_window.mailbox->ReleasePresentFrame(frame);
-}
-
 void RendererVulkan::SwapBuffers() {
     const auto& layout = render_window.GetFramebufferLayout();
     PrepareRendertarget();
     RenderScreenshot();
 
-    RenderToMailbox(layout, render_window.mailbox, false);
+    RenderToMailbox(layout, mailbox, false);
 
     m_current_frame++;
 
@@ -1180,11 +1025,10 @@ void RendererVulkan::RenderScreenshot() {
     }
     vk::Image staging_image{unsafe_image};
 
-    Frontend::Frame frame{};
-    render_window.mailbox->ReloadRenderFrame(&frame, width, height);
+    Frame frame{};
+    mailbox->ReloadFrame(&frame, width, height);
 
     renderpass_cache.ExitRenderpass();
-
     scheduler.Record([this, framebuffer = frame.framebuffer, width = frame.width,
                       height = frame.height](vk::CommandBuffer cmdbuf) {
         const vk::ClearValue clear{.color = clear_color};
@@ -1343,12 +1187,7 @@ void RendererVulkan::RenderScreenshot() {
 void RendererVulkan::NotifySurfaceChanged() {
     scheduler.Finish();
     vk::SurfaceKHR new_surface = CreateSurface(instance.GetInstance(), render_window);
-    {
-        std::scoped_lock lock{swapchain_mutex};
-        swapchain.SetNeedsRecreation(true);
-        swapchain.Create(new_surface);
-        swapchain_cv.notify_one();
-    }
+    mailbox->UpdateSurface(new_surface);
 }
 
 void RendererVulkan::Report() const {

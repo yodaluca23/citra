@@ -5,6 +5,7 @@
 #include <utility>
 #include "common/microprofile.h"
 #include "common/settings.h"
+#include "common/thread.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
@@ -79,6 +80,7 @@ void Scheduler::DispatchWork() {
 }
 
 void Scheduler::WorkerThread(std::stop_token stop_token) {
+    Common::SetCurrentThreadName("VulkanWorker");
     do {
         std::unique_ptr<CommandChunk> work;
         {

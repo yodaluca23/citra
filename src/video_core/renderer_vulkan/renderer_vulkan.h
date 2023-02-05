@@ -54,7 +54,7 @@ struct ScreenInfo {
     vk::ImageView image_view;
 };
 
-class RasterizerVulkan;
+class PresentMailbox;
 
 class RendererVulkan : public VideoCore::RendererBase {
     static constexpr std::size_t PRESENT_PIPELINES = 3;
@@ -70,7 +70,7 @@ public:
 
     void SwapBuffers() override;
     void NotifySurfaceChanged() override;
-    void TryPresent(int timeout_ms, bool is_secondary) override;
+    void TryPresent(int timeout_ms, bool is_secondary) override {}
     void PrepareVideoDumping() override {}
     void CleanupVideoDumping() override {}
     void Sync() override;
@@ -88,7 +88,7 @@ private:
     void PrepareRendertarget();
     void RenderScreenshot();
     void RenderToMailbox(const Layout::FramebufferLayout& layout,
-                         std::unique_ptr<Frontend::TextureMailbox>& mailbox, bool flipped);
+                         std::unique_ptr<PresentMailbox>& mailbox, bool flipped);
     void BeginRendering();
 
     /**
@@ -135,8 +135,7 @@ private:
     Swapchain swapchain;
     StreamBuffer vertex_buffer;
     RasterizerVulkan rasterizer;
-    std::mutex swapchain_mutex;
-    std::condition_variable swapchain_cv;
+    std::unique_ptr<PresentMailbox> mailbox;
 
     /// Present pipelines (Normal, Anaglyph, Interlaced)
     vk::PipelineLayout present_pipeline_layout;

@@ -3,20 +3,24 @@
 // Refer to the license.txt file included.
 
 #include "common/microprofile.h"
+#include "common/thread.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
+#include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_swapchain.h"
 #include "video_core/renderer_vulkan/vk_texture_mailbox.h"
 
 #include <vk_mem_alloc.h>
 
 MICROPROFILE_DEFINE(Vulkan_WaitPresent, "Vulkan", "Wait For Present", MP_RGB(128, 128, 128));
+MICROPROFILE_DEFINE(Vulkan_PresentFrame, "Vulkan", "Present Frame", MP_RGB(64, 64, 0));
 
 namespace Vulkan {
 
-TextureMailbox::TextureMailbox(const Instance& instance_, const Swapchain& swapchain_,
-                               const RenderpassCache& renderpass_cache_)
-    : instance{instance_}, swapchain{swapchain_}, renderpass_cache{renderpass_cache_} {
+PresentMailbox::PresentMailbox(const Instance& instance_, Swapchain& swapchain_,
+                               Scheduler& scheduler_, RenderpassCache& renderpass_cache_)
+    : instance{instance_}, swapchain{swapchain_}, scheduler{scheduler_},
+      renderpass_cache{renderpass_cache_}, graphics_queue{instance.GetGraphicsQueue()} {
 
     const vk::Device device = instance.GetDevice();
     const vk::CommandPoolCreateInfo pool_info = {
@@ -34,20 +38,19 @@ TextureMailbox::TextureMailbox(const Instance& instance_, const Swapchain& swapc
     const std::vector command_buffers = device.allocateCommandBuffers(alloc_info);
 
     for (u32 i = 0; i < SWAP_CHAIN_SIZE; i++) {
-        Frontend::Frame& frame = swap_chain[i];
+        Frame& frame = swap_chain[i];
         frame.cmdbuf = command_buffers[i];
         frame.render_ready = device.createSemaphore({});
         frame.present_done = device.createFence({.flags = vk::FenceCreateFlagBits::eSignaled});
-        free_queue.push(&frame);
+        free_queue.Push(&frame);
     }
+
+    present_thread = std::jthread([this](std::stop_token token) { PresentThread(token); });
 }
 
-TextureMailbox::~TextureMailbox() {
-    std::scoped_lock lock{present_mutex, free_mutex};
-    free_queue = {};
-    present_queue = {};
-    present_cv.notify_all();
-    free_cv.notify_all();
+PresentMailbox::~PresentMailbox() {
+    free_queue.Clear();
+    present_queue.Clear();
 
     const vk::Device device = instance.GetDevice();
     device.destroyCommandPool(command_pool);
@@ -60,7 +63,7 @@ TextureMailbox::~TextureMailbox() {
     }
 }
 
-void TextureMailbox::ReloadRenderFrame(Frontend::Frame* frame, u32 width, u32 height) {
+void PresentMailbox::ReloadFrame(Frame* frame, u32 width, u32 height) {
     vk::Device device = instance.GetDevice();
     if (frame->framebuffer) {
         device.destroyFramebuffer(frame->framebuffer);
@@ -131,26 +134,16 @@ void TextureMailbox::ReloadRenderFrame(Frontend::Frame* frame, u32 width, u32 he
     frame->height = height;
 }
 
-Frontend::Frame* TextureMailbox::GetRenderFrame() {
+Frame* PresentMailbox::GetRenderFrame() {
     MICROPROFILE_SCOPE(Vulkan_WaitPresent);
 
-    Frontend::Frame* frame{};
-    {
-        std::unique_lock lock{free_mutex};
-        if (free_queue.empty()) {
-            free_cv.wait(lock, [&] { return !free_queue.empty(); });
-        }
-
-        frame = free_queue.front();
-        free_queue.pop();
-    }
-
-    std::scoped_lock lock{frame->fence_mutex};
+    Frame* frame = free_queue.PopWait();
 
     vk::Device device = instance.GetDevice();
     vk::Result result{};
 
     const auto Wait = [&]() {
+        std::scoped_lock lock{frame->fence_mutex};
         result = device.waitForFences(frame->present_done, false, std::numeric_limits<u64>::max());
         return result;
     };
@@ -173,31 +166,168 @@ Frontend::Frame* TextureMailbox::GetRenderFrame() {
     return frame;
 }
 
-void TextureMailbox::ReleaseRenderFrame(Frontend::Frame* frame) {
-    std::unique_lock lock{present_mutex};
-    present_queue.push(frame);
-    present_cv.notify_one();
+void PresentMailbox::UpdateSurface(vk::SurfaceKHR surface) {
+    std::scoped_lock lock{swapchain_mutex};
+    swapchain.Create(surface);
+    swapchain_cv.notify_one();
 }
 
-void TextureMailbox::ReleasePresentFrame(Frontend::Frame* frame) {
-    std::unique_lock lock{free_mutex};
-    free_queue.push(frame);
-    free_cv.notify_one();
+void PresentMailbox::Present(Frame* frame) {
+    present_queue.Push(frame);
 }
 
-Frontend::Frame* TextureMailbox::TryGetPresentFrame(int timeout_ms) {
-    std::unique_lock lock{present_mutex};
-    // Wait for new entries in the present_queue
-    present_cv.wait_for(lock, std::chrono::milliseconds(timeout_ms),
-                        [&] { return !present_queue.empty(); });
-    if (present_queue.empty()) {
-        LOG_DEBUG(Render_Vulkan, "Timed out waiting present frame");
-        return nullptr;
+void PresentMailbox::PresentThread(std::stop_token token) {
+    Common::SetCurrentThreadName("VulkanPresent");
+    do {
+        Frame* frame = present_queue.PopWait(token);
+        CopyToSwapchain(frame);
+        free_queue.Push(frame);
+    } while (!token.stop_requested());
+}
+
+void PresentMailbox::CopyToSwapchain(Frame* frame) {
+    MICROPROFILE_SCOPE(Vulkan_PresentFrame);
+
+#if ANDROID
+    // On Android swapchain invalidations are always due to surface changes.
+    // These are processed on the main thread so wait for it to recreate
+    // the swapchain for us.
+    std::unique_lock lock{swapchain_mutex};
+    swapchain_cv.wait(lock, [this]() { return !swapchain.NeedsRecreation(); });
+#endif
+
+    while (!swapchain.AcquireNextImage()) {
+#if ANDROID
+        swapchain_cv.wait(lock, [this]() { return !swapchain.NeedsRecreation(); });
+#else
+        std::scoped_lock lock{scheduler.QueueMutex()};
+        graphics_queue.waitIdle();
+        swapchain.Create();
+#endif
     }
 
-    Frontend::Frame* frame = present_queue.front();
-    present_queue.pop();
-    return frame;
+    const vk::Image swapchain_image = swapchain.Image();
+
+    const vk::CommandBufferBeginInfo begin_info = {
+        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+    };
+    const vk::CommandBuffer cmdbuf = frame->cmdbuf;
+    cmdbuf.begin(begin_info);
+
+    const auto [width, height] = swapchain.GetExtent();
+    const u32 copy_width = std::min(width, frame->width);
+    const u32 copy_height = std::min(height, frame->height);
+
+    const vk::ImageCopy image_copy = {
+        .srcSubresource{
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .srcOffset = {0, 0, 0},
+        .dstSubresource{
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .dstOffset = {0, 0, 0},
+        .extent = {copy_width, copy_height, 1},
+    };
+
+    const std::array pre_barriers{
+        vk::ImageMemoryBarrier{
+            .srcAccessMask = vk::AccessFlagBits::eNone,
+            .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .oldLayout = vk::ImageLayout::eUndefined,
+            .newLayout = vk::ImageLayout::eTransferDstOptimal,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = swapchain_image,
+            .subresourceRange{
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = VK_REMAINING_ARRAY_LAYERS,
+            },
+        },
+        vk::ImageMemoryBarrier{
+            .srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite,
+            .dstAccessMask = vk::AccessFlagBits::eTransferRead,
+            .oldLayout = vk::ImageLayout::eTransferSrcOptimal,
+            .newLayout = vk::ImageLayout::eTransferSrcOptimal,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = frame->image,
+            .subresourceRange{
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = VK_REMAINING_ARRAY_LAYERS,
+            },
+        },
+    };
+    const vk::ImageMemoryBarrier post_barrier{
+        .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+        .dstAccessMask = vk::AccessFlagBits::eNone,
+        .oldLayout = vk::ImageLayout::eTransferDstOptimal,
+        .newLayout = vk::ImageLayout::ePresentSrcKHR,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = swapchain_image,
+        .subresourceRange{
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = VK_REMAINING_ARRAY_LAYERS,
+        },
+    };
+
+    cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eColorAttachmentOutput,
+                           vk::PipelineStageFlagBits::eTransfer, vk::DependencyFlagBits::eByRegion,
+                           {}, {}, pre_barriers);
+
+    cmdbuf.copyImage(frame->image, vk::ImageLayout::eTransferSrcOptimal, swapchain_image,
+                     vk::ImageLayout::eTransferDstOptimal, image_copy);
+
+    cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                           vk::PipelineStageFlagBits::eBottomOfPipe,
+                           vk::DependencyFlagBits::eByRegion, {}, {}, post_barrier);
+
+    cmdbuf.end();
+
+    static constexpr std::array<vk::PipelineStageFlags, 2> wait_stage_masks = {
+        vk::PipelineStageFlagBits::eColorAttachmentOutput,
+        vk::PipelineStageFlagBits::eAllGraphics,
+    };
+
+    const vk::Semaphore present_ready = swapchain.GetPresentReadySemaphore();
+    const vk::Semaphore image_acquired = swapchain.GetImageAcquiredSemaphore();
+    const std::array wait_semaphores = {image_acquired, frame->render_ready};
+
+    vk::SubmitInfo submit_info = {
+        .waitSemaphoreCount = static_cast<u32>(wait_semaphores.size()),
+        .pWaitSemaphores = wait_semaphores.data(),
+        .pWaitDstStageMask = wait_stage_masks.data(),
+        .commandBufferCount = 1u,
+        .pCommandBuffers = &cmdbuf,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &present_ready,
+    };
+
+    try {
+        std::scoped_lock lock{scheduler.QueueMutex(), frame->fence_mutex};
+        graphics_queue.submit(submit_info, frame->present_done);
+    } catch (vk::DeviceLostError& err) {
+        LOG_CRITICAL(Render_Vulkan, "Device lost during present submit: {}", err.what());
+        UNREACHABLE();
+    }
+
+    swapchain.Present();
 }
 
 } // namespace Vulkan
