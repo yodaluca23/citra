@@ -714,7 +714,7 @@ void RendererVulkan::DrawSingleScreen(u32 screen_id, float x, float y, float w, 
     draw_info.i_resolution =
         Common::Vec4f{width * scale_factor, height * scale_factor, 1.0f / (width * scale_factor),
                       1.0f / (height * scale_factor)};
-    draw_info.o_resolution = Common::Vec4f{h, w, 1.0f / h, 1.0f / w};
+    draw_info.o_resolution = Common::Vec4f{w, h, 1.0f / h, 1.0f / w};
     draw_info.screen_id_l = screen_id;
 
     scheduler.Record([this, offset = offset, info = draw_info](vk::CommandBuffer cmdbuf) {
@@ -841,7 +841,8 @@ void RendererVulkan::DrawScreens(Frame* frame, const Layout::FramebufferLayout& 
     if (layout.top_screen_enabled) {
         if (layout.is_rotated) {
             if (render_3d == Settings::StereoRenderOption::Off) {
-                DrawSingleScreenRotated(0, top_screen.left, top_screen.top, top_screen.GetWidth(),
+                int eye = static_cast<int>(Settings::values.mono_render_option.GetValue());
+                DrawSingleScreenRotated(eye, top_screen.left, top_screen.top, top_screen.GetWidth(),
                                         top_screen.GetHeight());
             } else if (render_3d == Settings::StereoRenderOption::SideBySide) {
                 DrawSingleScreenRotated(0, (float)top_screen.left / 2, (float)top_screen.top,
@@ -867,7 +868,8 @@ void RendererVulkan::DrawScreens(Frame* frame, const Layout::FramebufferLayout& 
             }
         } else {
             if (render_3d == Settings::StereoRenderOption::Off) {
-                DrawSingleScreen(0, (float)top_screen.left, (float)top_screen.top,
+                int eye = static_cast<int>(Settings::values.mono_render_option.GetValue());
+                DrawSingleScreen(eye, (float)top_screen.left, (float)top_screen.top,
                                  (float)top_screen.GetWidth(), (float)top_screen.GetHeight());
             } else if (render_3d == Settings::StereoRenderOption::SideBySide) {
                 DrawSingleScreen(0, (float)top_screen.left / 2, (float)top_screen.top,

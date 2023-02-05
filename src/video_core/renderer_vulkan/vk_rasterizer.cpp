@@ -267,7 +267,6 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
         buffer_offset += Common::AlignUp(aligned_stride * vertex_num, 4);
     }
 
-    binding_offsets[layout.binding_count] = array_offset + buffer_offset;
     stream_buffer.Commit(buffer_offset);
 
     // Assign the rest of the attributes to the last binding
@@ -276,9 +275,6 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     // Bind the generated bindings
     scheduler.Record([this, binding_count = layout.binding_count,
                       vertex_offsets = binding_offsets](vk::CommandBuffer cmdbuf) {
-        for (auto& offset : vertex_offsets) {
-            ASSERT_MSG(offset != 0x8000000, "Bad offset");
-        }
         cmdbuf.bindVertexBuffers(0, binding_count, vertex_buffers.data(), vertex_offsets.data());
     });
 }
@@ -289,6 +285,7 @@ void RasterizerVulkan::SetupFixedAttribs() {
     VertexLayout& layout = pipeline_info.vertex_layout;
 
     auto [fixed_ptr, fixed_offset, _] = stream_buffer.Map(16 * sizeof(Common::Vec4f), 0);
+    binding_offsets[layout.binding_count] = fixed_offset;
 
     // Reserve the last binding for fixed and default attributes
     // Place the default attrib at offset zero for easy access

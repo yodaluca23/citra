@@ -77,7 +77,9 @@ TextureRuntime::TextureRuntime(Driver& driver)
 
 StagingData TextureRuntime::FindStaging(u32 size, bool upload) {
     if (!upload) {
-        ASSERT_MSG(download_buffer.size() <= size, "Download buffer to small");
+        if (size > download_buffer.size()) {
+            download_buffer.resize(size);
+        }
         return StagingData{
             .size = size,
             .mapped = std::span{download_buffer.data(), size},
