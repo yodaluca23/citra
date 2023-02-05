@@ -55,10 +55,10 @@ private:
     RenderpassCache& renderpass_cache;
     vk::CommandPool command_pool;
     vk::Queue graphics_queue;
-    std::jthread present_thread;
     std::array<Frame, SWAP_CHAIN_SIZE> swap_chain{};
     Common::SPSCQueue<Frame*> free_queue{};
     Common::SPSCQueue<Frame*, true> present_queue{};
+    std::jthread present_thread;
     std::mutex swapchain_mutex;
     std::condition_variable swapchain_cv;
 };

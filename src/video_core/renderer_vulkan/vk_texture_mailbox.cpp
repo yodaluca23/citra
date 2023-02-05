@@ -49,9 +49,6 @@ PresentMailbox::PresentMailbox(const Instance& instance_, Swapchain& swapchain_,
 }
 
 PresentMailbox::~PresentMailbox() {
-    free_queue.Clear();
-    present_queue.Clear();
-
     const vk::Device device = instance.GetDevice();
     device.destroyCommandPool(command_pool);
     for (auto& frame : swap_chain) {
@@ -180,6 +177,9 @@ void PresentMailbox::PresentThread(std::stop_token token) {
     Common::SetCurrentThreadName("VulkanPresent");
     do {
         Frame* frame = present_queue.PopWait(token);
+        if (token.stop_requested()) {
+            continue;
+        }
         CopyToSwapchain(frame);
         free_queue.Push(frame);
     } while (!token.stop_requested());

@@ -142,7 +142,7 @@ RendererVulkan::~RendererVulkan() {
         vmaDestroyImage(instance.GetAllocator(), info.texture.image, info.texture.allocation);
     }
 
-    render_window.mailbox.reset();
+    mailbox.reset();
 }
 
 void RendererVulkan::Sync() {
