@@ -2,13 +2,15 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#include <bit>
+#include "common/microprofile.h"
 #include "common/scope_exit.h"
+#include "common/settings.h"
 #include "video_core/rasterizer_cache/utils.h"
 #include "video_core/renderer_opengl/gl_driver.h"
 #include "video_core/renderer_opengl/gl_format_reinterpreter.h"
 #include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/renderer_opengl/gl_texture_runtime.h"
+#include "video_core/video_core.h"
 
 namespace OpenGL {
 

@@ -6,6 +6,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "common/assert.h"
 #include "common/logging/log.h"
+#include "common/microprofile.h"
 #include "common/settings.h"
 #include "core/core.h"
 #include "core/frontend/framebuffer_layout.h"

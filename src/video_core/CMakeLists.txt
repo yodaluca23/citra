@@ -33,6 +33,7 @@ add_library(video_core STATIC
     rasterizer_cache/pixel_format.h
     rasterizer_cache/rasterizer_cache.cpp
     rasterizer_cache/rasterizer_cache.h
+    rasterizer_cache/rasterizer_cache_base.h
     rasterizer_cache/surface_base.h
     rasterizer_cache/utils.cpp
     rasterizer_cache/utils.h
@@ -46,6 +47,7 @@ add_library(video_core STATIC
     renderer_opengl/gl_format_reinterpreter.h
     renderer_opengl/gl_rasterizer.cpp
     renderer_opengl/gl_rasterizer.h
+    renderer_opengl/gl_rasterizer_cache.cpp
     renderer_opengl/gl_resource_manager.cpp
     renderer_opengl/gl_resource_manager.h
     renderer_opengl/gl_shader_decompiler.cpp
@@ -99,6 +101,7 @@ add_library(video_core STATIC
     renderer_vulkan/vk_master_semaphore.h
     renderer_vulkan/vk_rasterizer.cpp
     renderer_vulkan/vk_rasterizer.h
+    renderer_vulkan/vk_rasterizer_cache.cpp
     renderer_vulkan/vk_scheduler.cpp
     renderer_vulkan/vk_scheduler.h
     renderer_vulkan/vk_resource_pool.cpp

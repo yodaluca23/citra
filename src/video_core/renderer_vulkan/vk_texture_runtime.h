@@ -7,7 +7,7 @@
 #include <set>
 #include <span>
 #include <vulkan/vulkan_hash.hpp>
-#include "video_core/rasterizer_cache/rasterizer_cache.h"
+#include "video_core/rasterizer_cache/rasterizer_cache_base.h"
 #include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/renderer_vulkan/vk_blit_helper.h"
 #include "video_core/renderer_vulkan/vk_format_reinterpreter.h"
