@@ -52,6 +52,8 @@ constexpr vk::ImageUsageFlags NULL_STORAGE_USAGE = NULL_USAGE | vk::ImageUsageFl
 struct DrawParams {
     u32 vertex_count;
     s32 vertex_offset;
+    u32 binding_count;
+    std::array<u32, 16> bindings;
     bool is_indexed;
 };
 
@@ -175,8 +177,8 @@ void RasterizerVulkan::SyncFixedState() {
     SyncDepthWriteMask();
 }
 
-void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_min,
-                                        u32 vs_input_index_max) {
+void RasterizerVulkan::SetupVertexArray() {
+    const auto [vs_input_index_min, vs_input_index_max, vs_input_size] = vertex_info;
     auto [array_ptr, array_offset, invalidate] = stream_buffer.Map(vs_input_size, 16);
 
     /**
@@ -270,12 +272,6 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
 
     // Assign the rest of the attributes to the last binding
     SetupFixedAttribs();
-
-    // Bind the generated bindings
-    scheduler.Record([this, binding_count = layout.binding_count,
-                      vertex_offsets = binding_offsets](vk::CommandBuffer cmdbuf) {
-        cmdbuf.bindVertexBuffers(0, binding_count, vertex_buffers.data(), vertex_offsets.data());
-    });
 }
 
 void RasterizerVulkan::SetupFixedAttribs() {
@@ -366,13 +362,7 @@ bool RasterizerVulkan::AccelerateDrawBatch(bool is_indexed) {
         }
     }
 
-    return Draw(true, is_indexed);
-}
-
-bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
-    const auto [vs_input_index_min, vs_input_index_max, vs_input_size] =
-        AnalyzeVertexArray(is_indexed, instance.GetMinVertexStrideAlignment());
-
+    pipeline_info.rasterization.topology.Assign(regs.pipeline.triangle_topology);
     if (regs.pipeline.triangle_topology == TriangleTopology::Fan &&
         !instance.IsTriangleFanSupported()) {
         LOG_DEBUG(Render_Vulkan,
@@ -380,31 +370,43 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
         return false;
     }
 
-    SetupVertexArray(vs_input_size, vs_input_index_min, vs_input_index_max);
-    if (is_indexed) {
-        SetupIndexArray();
-    }
+    // Vertex data analysis and setup might involve rasterizer cache memory flushes
+    // so perform it early to avoid invalidating our state in the middle of the draw
+    vertex_info = AnalyzeVertexArray(is_indexed, instance.GetMinVertexStrideAlignment());
+    SetupVertexArray();
 
     if (!SetupVertexShader()) {
         return false;
     }
-
     if (!SetupGeometryShader()) {
         return false;
     }
 
-    pipeline_info.rasterization.topology.Assign(regs.pipeline.triangle_topology);
+    return Draw(true, is_indexed);
+}
+
+bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
+    if (is_indexed) {
+        SetupIndexArray();
+    }
+
     if (!pipeline_cache.BindPipeline(pipeline_info, !async_shaders)) {
-        return true; ///< Skip draw call when pipeline is not ready
+        return true; // Skip draw call when pipeline is not ready
     }
 
     const DrawParams params = {
         .vertex_count = regs.pipeline.num_vertices,
-        .vertex_offset = -static_cast<s32>(vs_input_index_min),
+        .vertex_offset = -static_cast<s32>(vertex_info.vs_input_index_min),
+        .binding_count = pipeline_info.vertex_layout.binding_count,
+        .bindings = binding_offsets,
         .is_indexed = is_indexed,
     };
 
-    scheduler.Record([params](vk::CommandBuffer cmdbuf) {
+    scheduler.Record([this, params](vk::CommandBuffer cmdbuf) {
+        std::array<u64, 16> offsets;
+        std::copy(params.bindings.begin(), params.bindings.end(), offsets.begin());
+
+        cmdbuf.bindVertexBuffers(0, params.binding_count, vertex_buffers.data(), offsets.data());
         if (params.is_indexed) {
             cmdbuf.drawIndexed(params.vertex_count, 1, 0, params.vertex_offset, 0);
         } else {
@@ -447,6 +449,12 @@ void RasterizerVulkan::DrawTriangles() {
     if (vertex_batch.empty()) {
         return;
     }
+
+    pipeline_info.rasterization.topology.Assign(Pica::PipelineRegs::TriangleTopology::List);
+    pipeline_info.vertex_layout = software_layout;
+
+    pipeline_cache.UseTrivialVertexShader();
+    pipeline_cache.UseTrivialGeometryShader();
 
     Draw(false, false);
 }
@@ -706,10 +714,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     if (accelerate) {
         succeeded = AccelerateDrawBatchInternal(is_indexed);
     } else {
-        pipeline_info.rasterization.topology.Assign(Pica::PipelineRegs::TriangleTopology::List);
-        pipeline_info.vertex_layout = software_layout;
-        pipeline_cache.UseTrivialVertexShader();
-        pipeline_cache.UseTrivialGeometryShader();
         pipeline_cache.BindPipeline(pipeline_info, true);
 
         const u32 max_vertices = STREAM_BUFFER_SIZE / sizeof(HardwareVertex);
