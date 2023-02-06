@@ -272,7 +272,7 @@ void PresentMailbox::CopyToSwapchain(Frame* frame) {
     };
     const vk::ImageMemoryBarrier post_barrier{
         .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
-        .dstAccessMask = vk::AccessFlagBits::eNone,
+        .dstAccessMask = vk::AccessFlagBits::eMemoryRead,
         .oldLayout = vk::ImageLayout::eTransferDstOptimal,
         .newLayout = vk::ImageLayout::ePresentSrcKHR,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -294,8 +294,8 @@ void PresentMailbox::CopyToSwapchain(Frame* frame) {
     cmdbuf.copyImage(frame->image, vk::ImageLayout::eTransferSrcOptimal, swapchain_image,
                      vk::ImageLayout::eTransferDstOptimal, image_copy);
 
-    cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                           vk::PipelineStageFlagBits::eBottomOfPipe,
+    cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
+                           vk::PipelineStageFlagBits::eAllCommands,
                            vk::DependencyFlagBits::eByRegion, {}, {}, post_barrier);
 
     cmdbuf.end();
