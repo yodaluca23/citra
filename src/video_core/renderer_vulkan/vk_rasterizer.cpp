@@ -66,7 +66,7 @@ RasterizerVulkan::RasterizerVulkan(Memory::MemorySystem& memory_, Frontend::EmuW
                                    const Instance& instance, Scheduler& scheduler,
                                    DescriptorManager& desc_manager, TextureRuntime& runtime,
                                    RenderpassCache& renderpass_cache)
-    : memory{memory_}, instance{instance}, scheduler{scheduler}, runtime{runtime},
+    : RasterizerAccelerated{memory_}, instance{instance}, scheduler{scheduler}, runtime{runtime},
       renderpass_cache{renderpass_cache}, desc_manager{desc_manager}, res_cache{memory, runtime},
       pipeline_cache{instance, scheduler, renderpass_cache, desc_manager},
       null_surface{NULL_PARAMS, vk::Format::eR8G8B8A8Unorm, NULL_USAGE,
@@ -187,7 +187,6 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
      * as something analogous to Vulkan bindings. The user can store attributes in separate loaders
      * or interleave them in the same loader.
      **/
-    const auto& regs = Pica::g_state.regs;
     const auto& vertex_attributes = regs.pipeline.vertex_attributes;
     PAddr base_address = vertex_attributes.GetPhysicalBaseAddress(); // GPUREG_ATTR_BUF_BASE
 
@@ -280,7 +279,6 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
 }
 
 void RasterizerVulkan::SetupFixedAttribs() {
-    const auto& regs = Pica::g_state.regs;
     const auto& vertex_attributes = regs.pipeline.vertex_attributes;
     VertexLayout& layout = pipeline_info.vertex_layout;
 
@@ -343,13 +341,12 @@ void RasterizerVulkan::SetupFixedAttribs() {
 
 bool RasterizerVulkan::SetupVertexShader() {
     MICROPROFILE_SCOPE(Vulkan_VS);
-    return pipeline_cache.UseProgrammableVertexShader(Pica::g_state.regs, Pica::g_state.vs,
+    return pipeline_cache.UseProgrammableVertexShader(regs, Pica::g_state.vs,
                                                       pipeline_info.vertex_layout);
 }
 
 bool RasterizerVulkan::SetupGeometryShader() {
     MICROPROFILE_SCOPE(Vulkan_GS);
-    const auto& regs = Pica::g_state.regs;
 
     if (regs.pipeline.use_gs != Pica::PipelineRegs::UseGS::No) {
         LOG_ERROR(Render_Vulkan, "Accelerate draw doesn't support geometry shader");
@@ -360,7 +357,6 @@ bool RasterizerVulkan::SetupGeometryShader() {
 }
 
 bool RasterizerVulkan::AccelerateDrawBatch(bool is_indexed) {
-    const auto& regs = Pica::g_state.regs;
     if (regs.pipeline.use_gs != Pica::PipelineRegs::UseGS::No) {
         if (regs.pipeline.gs_config.mode != Pica::PipelineRegs::GSMode::Point) {
             return false;
@@ -374,8 +370,6 @@ bool RasterizerVulkan::AccelerateDrawBatch(bool is_indexed) {
 }
 
 bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
-    const auto& regs = Pica::g_state.regs;
-
     const auto [vs_input_index_min, vs_input_index_max, vs_input_size] =
         AnalyzeVertexArray(is_indexed, instance.GetMinVertexStrideAlignment());
 
@@ -422,8 +416,6 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
 }
 
 void RasterizerVulkan::SetupIndexArray() {
-    const auto& regs = Pica::g_state.regs;
-
     const bool index_u8 = regs.pipeline.index_array.format == 0;
     const bool native_u8 = index_u8 && instance.IsIndexTypeUint8Supported();
     const vk::IndexType index_type = native_u8 ? vk::IndexType::eUint8EXT : vk::IndexType::eUint16;
@@ -461,7 +453,6 @@ void RasterizerVulkan::DrawTriangles() {
 
 bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     MICROPROFILE_SCOPE(Vulkan_Drawing);
-    const auto& regs = Pica::g_state.regs;
 
     const bool shadow_rendering = regs.framebuffer.IsShadowRendering();
     const bool has_stencil = regs.framebuffer.HasStencil();
@@ -1089,7 +1080,7 @@ vk::Sampler RasterizerVulkan::CreateSampler(const SamplerInfo& info) {
 }
 
 void RasterizerVulkan::SyncClipEnabled() {
-    bool clip_enabled = Pica::g_state.regs.rasterizer.clip_enable != 0;
+    bool clip_enabled = regs.rasterizer.clip_enable != 0;
     if (clip_enabled != uniform_block_data.data.enable_clip1) {
         uniform_block_data.data.enable_clip1 = clip_enabled;
         uniform_block_data.dirty = true;
@@ -1097,18 +1088,14 @@ void RasterizerVulkan::SyncClipEnabled() {
 }
 
 void RasterizerVulkan::SyncCullMode() {
-    const auto& regs = Pica::g_state.regs;
     pipeline_info.rasterization.cull_mode.Assign(regs.rasterizer.cull_mode);
 }
 
 void RasterizerVulkan::SyncBlendEnabled() {
-    pipeline_info.blending.blend_enable =
-        Pica::g_state.regs.framebuffer.output_merger.alphablend_enable;
+    pipeline_info.blending.blend_enable = regs.framebuffer.output_merger.alphablend_enable;
 }
 
 void RasterizerVulkan::SyncBlendFuncs() {
-    const auto& regs = Pica::g_state.regs;
-
     pipeline_info.blending.color_blend_eq.Assign(
         regs.framebuffer.output_merger.alpha_blending.blend_equation_rgb);
     pipeline_info.blending.alpha_blend_eq.Assign(
@@ -1124,7 +1111,6 @@ void RasterizerVulkan::SyncBlendFuncs() {
 }
 
 void RasterizerVulkan::SyncBlendColor() {
-    const auto& regs = Pica::g_state.regs;
     pipeline_info.dynamic.blend_color = regs.framebuffer.output_merger.blend_const.raw;
 }
 
@@ -1134,7 +1120,6 @@ void RasterizerVulkan::SyncLogicOp() {
         shader_dirty = true;
     }
 
-    const auto& regs = Pica::g_state.regs;
     pipeline_info.blending.logic_op = regs.framebuffer.output_merger.logic_op;
 
     const bool is_logic_op_emulated =
@@ -1149,7 +1134,6 @@ void RasterizerVulkan::SyncLogicOp() {
 }
 
 void RasterizerVulkan::SyncColorWriteMask() {
-    const auto& regs = Pica::g_state.regs;
     const u32 color_mask = regs.framebuffer.framebuffer.allow_color_write != 0
                                ? (regs.framebuffer.output_merger.depth_color_mask >> 8) & 0xF
                                : 0;
@@ -1168,7 +1152,6 @@ void RasterizerVulkan::SyncColorWriteMask() {
 }
 
 void RasterizerVulkan::SyncStencilWriteMask() {
-    const auto& regs = Pica::g_state.regs;
     pipeline_info.dynamic.stencil_write_mask =
         (regs.framebuffer.framebuffer.allow_depth_stencil_write != 0)
             ? static_cast<u32>(regs.framebuffer.output_merger.stencil_test.write_mask)
@@ -1176,16 +1159,12 @@ void RasterizerVulkan::SyncStencilWriteMask() {
 }
 
 void RasterizerVulkan::SyncDepthWriteMask() {
-    const auto& regs = Pica::g_state.regs;
-
     const bool write_enable = (regs.framebuffer.framebuffer.allow_depth_stencil_write != 0 &&
                                regs.framebuffer.output_merger.depth_write_enable);
     pipeline_info.depth_stencil.depth_write_enable.Assign(write_enable);
 }
 
 void RasterizerVulkan::SyncStencilTest() {
-    const auto& regs = Pica::g_state.regs;
-
     const auto& stencil_test = regs.framebuffer.output_merger.stencil_test;
     const bool test_enable = stencil_test.enable && regs.framebuffer.framebuffer.depth_format ==
                                                         Pica::FramebufferRegs::DepthFormat::D24S8;
@@ -1200,8 +1179,6 @@ void RasterizerVulkan::SyncStencilTest() {
 }
 
 void RasterizerVulkan::SyncDepthTest() {
-    const auto& regs = Pica::g_state.regs;
-
     const bool test_enabled = regs.framebuffer.output_merger.depth_test_enable == 1 ||
                               regs.framebuffer.output_merger.depth_write_enable == 1;
     const auto compare_op = regs.framebuffer.output_merger.depth_test_enable == 1
@@ -1275,6 +1252,7 @@ void RasterizerVulkan::SyncAndUploadLUTsLF() {
 }
 
 void RasterizerVulkan::SyncAndUploadLUTs() {
+    const auto& proctex = Pica::g_state.proctex;
     constexpr std::size_t max_size =
         sizeof(Common::Vec2f) * 128 * 3 + // proctex: noise + color + alpha
         sizeof(Common::Vec4f) * 256 +     // proctex
@@ -1292,7 +1270,7 @@ void RasterizerVulkan::SyncAndUploadLUTs() {
 
     // helper function for SyncProcTexNoiseLUT/ColorMap/AlphaMap
     auto SyncProcTexValueLUT =
-        [this, &buffer = buffer, &offset = offset, &invalidate = invalidate,
+        [this, buffer = buffer, offset = offset, invalidate = invalidate,
          &bytes_used](const std::array<Pica::State::ProcTex::ValueEntry, 128>& lut,
                       std::array<Common::Vec2f, 128>& lut_data, int& lut_offset) {
             std::array<Common::Vec2f, 128> new_data;
@@ -1312,21 +1290,21 @@ void RasterizerVulkan::SyncAndUploadLUTs() {
 
     // Sync the proctex noise lut
     if (uniform_block_data.proctex_noise_lut_dirty || invalidate) {
-        SyncProcTexValueLUT(Pica::g_state.proctex.noise_table, proctex_noise_lut_data,
+        SyncProcTexValueLUT(proctex.noise_table, proctex_noise_lut_data,
                             uniform_block_data.data.proctex_noise_lut_offset);
         uniform_block_data.proctex_noise_lut_dirty = false;
     }
 
     // Sync the proctex color map
     if (uniform_block_data.proctex_color_map_dirty || invalidate) {
-        SyncProcTexValueLUT(Pica::g_state.proctex.color_map_table, proctex_color_map_data,
+        SyncProcTexValueLUT(proctex.color_map_table, proctex_color_map_data,
                             uniform_block_data.data.proctex_color_map_offset);
         uniform_block_data.proctex_color_map_dirty = false;
     }
 
     // Sync the proctex alpha map
     if (uniform_block_data.proctex_alpha_map_dirty || invalidate) {
-        SyncProcTexValueLUT(Pica::g_state.proctex.alpha_map_table, proctex_alpha_map_data,
+        SyncProcTexValueLUT(proctex.alpha_map_table, proctex_alpha_map_data,
                             uniform_block_data.data.proctex_alpha_map_offset);
         uniform_block_data.proctex_alpha_map_dirty = false;
     }
@@ -1335,8 +1313,7 @@ void RasterizerVulkan::SyncAndUploadLUTs() {
     if (uniform_block_data.proctex_lut_dirty || invalidate) {
         std::array<Common::Vec4f, 256> new_data;
 
-        std::transform(Pica::g_state.proctex.color_table.begin(),
-                       Pica::g_state.proctex.color_table.end(), new_data.begin(),
+        std::transform(proctex.color_table.begin(), proctex.color_table.end(), new_data.begin(),
                        [](const auto& entry) {
                            auto rgba = entry.ToVector() / 255.0f;
                            return Common::Vec4f{rgba.r(), rgba.g(), rgba.b(), rgba.a()};
@@ -1358,9 +1335,8 @@ void RasterizerVulkan::SyncAndUploadLUTs() {
     if (uniform_block_data.proctex_diff_lut_dirty || invalidate) {
         std::array<Common::Vec4f, 256> new_data;
 
-        std::transform(Pica::g_state.proctex.color_diff_table.begin(),
-                       Pica::g_state.proctex.color_diff_table.end(), new_data.begin(),
-                       [](const auto& entry) {
+        std::transform(proctex.color_diff_table.begin(), proctex.color_diff_table.end(),
+                       new_data.begin(), [](const auto& entry) {
                            auto rgba = entry.ToVector() / 255.0f;
                            return Common::Vec4f{rgba.r(), rgba.g(), rgba.b(), rgba.a()};
                        });
@@ -1394,7 +1370,7 @@ void RasterizerVulkan::UploadUniforms(bool accelerate_draw) {
     u32 used_bytes = 0;
     if (sync_vs) {
         Pica::Shader::VSUniformData vs_uniforms;
-        vs_uniforms.uniforms.SetFromRegs(Pica::g_state.regs.vs, Pica::g_state.vs);
+        vs_uniforms.uniforms.SetFromRegs(regs.vs, Pica::g_state.vs);
         std::memcpy(uniforms + used_bytes, &vs_uniforms, sizeof(vs_uniforms));
 
         pipeline_cache.BindBuffer(0, stream_buffer.Handle(), offset + used_bytes,

@@ -15,10 +15,6 @@ namespace Frontend {
 class EmuWindow;
 }
 
-namespace Memory {
-class MemorySystem;
-}
-
 namespace Vulkan {
 
 struct ScreenInfo;
@@ -157,7 +153,6 @@ private:
     vk::Sampler CreateSampler(const SamplerInfo& info);
 
 private:
-    Memory::MemorySystem& memory;
     const Instance& instance;
     Scheduler& scheduler;
     TextureRuntime& runtime;

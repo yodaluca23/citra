@@ -9,11 +9,19 @@
 #include "video_core/regs_texturing.h"
 #include "video_core/shader/shader_uniforms.h"
 
+namespace Memory {
+class MemorySystem;
+}
+
+namespace Pica {
+struct Regs;
+}
+
 namespace VideoCore {
 
 class RasterizerAccelerated : public RasterizerInterface {
 public:
-    RasterizerAccelerated();
+    RasterizerAccelerated(Memory::MemorySystem& memory);
     virtual ~RasterizerAccelerated() = default;
 
     void AddTriangle(const Pica::Shader::OutputVertex& v0, const Pica::Shader::OutputVertex& v1,
@@ -132,6 +140,9 @@ protected:
     VertexArrayInfo AnalyzeVertexArray(bool is_indexed, u32 stride_alignment = 1);
 
 protected:
+    Memory::MemorySystem& memory;
+    Pica::Regs& regs;
+
     std::vector<HardwareVertex> vertex_batch;
     bool shader_dirty = true;
 

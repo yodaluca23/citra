@@ -7,7 +7,6 @@
 #include "core/memory.h"
 #include "video_core/pica_state.h"
 #include "video_core/rasterizer_accelerated.h"
-#include "video_core/video_core.h"
 
 namespace VideoCore {
 
@@ -51,7 +50,8 @@ RasterizerAccelerated::HardwareVertex::HardwareVertex(const Pica::Shader::Output
     }
 }
 
-RasterizerAccelerated::RasterizerAccelerated() {
+RasterizerAccelerated::RasterizerAccelerated(Memory::MemorySystem& memory_)
+    : memory{memory_}, regs{Pica::g_state.regs} {
     uniform_block_data.lighting_lut_dirty.fill(true);
 }
 
@@ -90,7 +90,6 @@ void RasterizerAccelerated::AddTriangle(const Pica::Shader::OutputVertex& v0,
 
 RasterizerAccelerated::VertexArrayInfo RasterizerAccelerated::AnalyzeVertexArray(
     bool is_indexed, u32 stride_alignment) {
-    const auto& regs = Pica::g_state.regs;
     const auto& vertex_attributes = regs.pipeline.vertex_attributes;
 
     u32 vertex_min;
@@ -98,7 +97,7 @@ RasterizerAccelerated::VertexArrayInfo RasterizerAccelerated::AnalyzeVertexArray
     if (is_indexed) {
         const auto& index_info = regs.pipeline.index_array;
         const PAddr address = vertex_attributes.GetPhysicalBaseAddress() + index_info.offset;
-        const u8* index_address_8 = VideoCore::g_memory->GetPhysicalPointer(address);
+        const u8* index_address_8 = memory.GetPhysicalPointer(address);
         const u16* index_address_16 = reinterpret_cast<const u16*>(index_address_8);
         const bool index_u16 = index_info.format != 0;
 
@@ -139,9 +138,10 @@ void RasterizerAccelerated::SyncEntireState() {
     SyncDepthOffset();
     SyncAlphaTest();
     SyncCombinerColor();
-    auto& tev_stages = Pica::g_state.regs.texturing.GetTevStages();
-    for (std::size_t index = 0; index < tev_stages.size(); ++index)
+    auto& tev_stages = regs.texturing.GetTevStages();
+    for (std::size_t index = 0; index < tev_stages.size(); ++index) {
         SyncTevConstColor(index, tev_stages[index]);
+    }
 
     SyncGlobalAmbient();
     for (unsigned light_index = 0; light_index < 8; light_index++) {
@@ -166,8 +166,6 @@ void RasterizerAccelerated::SyncEntireState() {
 }
 
 void RasterizerAccelerated::NotifyPicaRegisterChanged(u32 id) {
-    const auto& regs = Pica::g_state.regs;
-
     switch (id) {
     // Depth modifiers
     case PICA_REG_INDEX(rasterizer.viewport_depth_range):
@@ -614,8 +612,7 @@ void RasterizerAccelerated::NotifyPicaRegisterChanged(u32 id) {
 }
 
 void RasterizerAccelerated::SyncDepthScale() {
-    float depth_scale =
-        Pica::float24::FromRaw(Pica::g_state.regs.rasterizer.viewport_depth_range).ToFloat32();
+    float depth_scale = Pica::float24::FromRaw(regs.rasterizer.viewport_depth_range).ToFloat32();
 
     if (depth_scale != uniform_block_data.data.depth_scale) {
         uniform_block_data.data.depth_scale = depth_scale;
@@ -625,7 +622,7 @@ void RasterizerAccelerated::SyncDepthScale() {
 
 void RasterizerAccelerated::SyncDepthOffset() {
     float depth_offset =
-        Pica::float24::FromRaw(Pica::g_state.regs.rasterizer.viewport_depth_near_plane).ToFloat32();
+        Pica::float24::FromRaw(regs.rasterizer.viewport_depth_near_plane).ToFloat32();
 
     if (depth_offset != uniform_block_data.data.depth_offset) {
         uniform_block_data.data.depth_offset = depth_offset;
@@ -634,7 +631,7 @@ void RasterizerAccelerated::SyncDepthOffset() {
 }
 
 void RasterizerAccelerated::SyncFogColor() {
-    const auto& fog_color_regs = Pica::g_state.regs.texturing.fog_color;
+    const auto& fog_color_regs = regs.texturing.fog_color;
     const Common::Vec3f fog_color = {
         fog_color_regs.r.Value() / 255.0f,
         fog_color_regs.g.Value() / 255.0f,
@@ -648,18 +645,17 @@ void RasterizerAccelerated::SyncFogColor() {
 }
 
 void RasterizerAccelerated::SyncProcTexNoise() {
-    const auto& regs = Pica::g_state.regs.texturing;
     const Common::Vec2f proctex_noise_f = {
-        Pica::float16::FromRaw(regs.proctex_noise_frequency.u).ToFloat32(),
-        Pica::float16::FromRaw(regs.proctex_noise_frequency.v).ToFloat32(),
+        Pica::float16::FromRaw(regs.texturing.proctex_noise_frequency.u).ToFloat32(),
+        Pica::float16::FromRaw(regs.texturing.proctex_noise_frequency.v).ToFloat32(),
     };
     const Common::Vec2f proctex_noise_a = {
-        regs.proctex_noise_u.amplitude / 4095.0f,
-        regs.proctex_noise_v.amplitude / 4095.0f,
+        regs.texturing.proctex_noise_u.amplitude / 4095.0f,
+        regs.texturing.proctex_noise_v.amplitude / 4095.0f,
     };
     const Common::Vec2f proctex_noise_p = {
-        Pica::float16::FromRaw(regs.proctex_noise_u.phase).ToFloat32(),
-        Pica::float16::FromRaw(regs.proctex_noise_v.phase).ToFloat32(),
+        Pica::float16::FromRaw(regs.texturing.proctex_noise_u.phase).ToFloat32(),
+        Pica::float16::FromRaw(regs.texturing.proctex_noise_v.phase).ToFloat32(),
     };
 
     if (proctex_noise_f != uniform_block_data.data.proctex_noise_f ||
@@ -673,10 +669,9 @@ void RasterizerAccelerated::SyncProcTexNoise() {
 }
 
 void RasterizerAccelerated::SyncProcTexBias() {
-    const auto& regs = Pica::g_state.regs.texturing;
-    const auto proctex_bias =
-        Pica::float16::FromRaw(regs.proctex.bias_low | (regs.proctex_lut.bias_high << 8))
-            .ToFloat32();
+    const auto proctex_bias = Pica::float16::FromRaw(regs.texturing.proctex.bias_low |
+                                                     (regs.texturing.proctex_lut.bias_high << 8))
+                                  .ToFloat32();
     if (proctex_bias != uniform_block_data.data.proctex_bias) {
         uniform_block_data.data.proctex_bias = proctex_bias;
         uniform_block_data.dirty = true;
@@ -684,7 +679,6 @@ void RasterizerAccelerated::SyncProcTexBias() {
 }
 
 void RasterizerAccelerated::SyncAlphaTest() {
-    const auto& regs = Pica::g_state.regs;
     if (regs.framebuffer.output_merger.alpha_test.ref != uniform_block_data.data.alphatest_ref) {
         uniform_block_data.data.alphatest_ref = regs.framebuffer.output_merger.alpha_test.ref;
         uniform_block_data.dirty = true;
@@ -692,7 +686,7 @@ void RasterizerAccelerated::SyncAlphaTest() {
 }
 
 void RasterizerAccelerated::SyncCombinerColor() {
-    auto combiner_color = ColorRGBA8(Pica::g_state.regs.texturing.tev_combiner_buffer_color.raw);
+    auto combiner_color = ColorRGBA8(regs.texturing.tev_combiner_buffer_color.raw);
     if (combiner_color != uniform_block_data.data.tev_combiner_buffer_color) {
         uniform_block_data.data.tev_combiner_buffer_color = combiner_color;
         uniform_block_data.dirty = true;
@@ -712,7 +706,7 @@ void RasterizerAccelerated::SyncTevConstColor(
 }
 
 void RasterizerAccelerated::SyncGlobalAmbient() {
-    auto color = LightColor(Pica::g_state.regs.lighting.global_ambient);
+    auto color = LightColor(regs.lighting.global_ambient);
     if (color != uniform_block_data.data.lighting_global_ambient) {
         uniform_block_data.data.lighting_global_ambient = color;
         uniform_block_data.dirty = true;
@@ -720,7 +714,7 @@ void RasterizerAccelerated::SyncGlobalAmbient() {
 }
 
 void RasterizerAccelerated::SyncLightSpecular0(int light_index) {
-    auto color = LightColor(Pica::g_state.regs.lighting.light[light_index].specular_0);
+    auto color = LightColor(regs.lighting.light[light_index].specular_0);
     if (color != uniform_block_data.data.light_src[light_index].specular_0) {
         uniform_block_data.data.light_src[light_index].specular_0 = color;
         uniform_block_data.dirty = true;
@@ -728,7 +722,7 @@ void RasterizerAccelerated::SyncLightSpecular0(int light_index) {
 }
 
 void RasterizerAccelerated::SyncLightSpecular1(int light_index) {
-    auto color = LightColor(Pica::g_state.regs.lighting.light[light_index].specular_1);
+    auto color = LightColor(regs.lighting.light[light_index].specular_1);
     if (color != uniform_block_data.data.light_src[light_index].specular_1) {
         uniform_block_data.data.light_src[light_index].specular_1 = color;
         uniform_block_data.dirty = true;
@@ -736,7 +730,7 @@ void RasterizerAccelerated::SyncLightSpecular1(int light_index) {
 }
 
 void RasterizerAccelerated::SyncLightDiffuse(int light_index) {
-    auto color = LightColor(Pica::g_state.regs.lighting.light[light_index].diffuse);
+    auto color = LightColor(regs.lighting.light[light_index].diffuse);
     if (color != uniform_block_data.data.light_src[light_index].diffuse) {
         uniform_block_data.data.light_src[light_index].diffuse = color;
         uniform_block_data.dirty = true;
@@ -744,7 +738,7 @@ void RasterizerAccelerated::SyncLightDiffuse(int light_index) {
 }
 
 void RasterizerAccelerated::SyncLightAmbient(int light_index) {
-    auto color = LightColor(Pica::g_state.regs.lighting.light[light_index].ambient);
+    auto color = LightColor(regs.lighting.light[light_index].ambient);
     if (color != uniform_block_data.data.light_src[light_index].ambient) {
         uniform_block_data.data.light_src[light_index].ambient = color;
         uniform_block_data.dirty = true;
@@ -753,9 +747,9 @@ void RasterizerAccelerated::SyncLightAmbient(int light_index) {
 
 void RasterizerAccelerated::SyncLightPosition(int light_index) {
     const Common::Vec3f position = {
-        Pica::float16::FromRaw(Pica::g_state.regs.lighting.light[light_index].x).ToFloat32(),
-        Pica::float16::FromRaw(Pica::g_state.regs.lighting.light[light_index].y).ToFloat32(),
-        Pica::float16::FromRaw(Pica::g_state.regs.lighting.light[light_index].z).ToFloat32(),
+        Pica::float16::FromRaw(regs.lighting.light[light_index].x).ToFloat32(),
+        Pica::float16::FromRaw(regs.lighting.light[light_index].y).ToFloat32(),
+        Pica::float16::FromRaw(regs.lighting.light[light_index].z).ToFloat32(),
     };
 
     if (position != uniform_block_data.data.light_src[light_index].position) {
@@ -765,7 +759,7 @@ void RasterizerAccelerated::SyncLightPosition(int light_index) {
 }
 
 void RasterizerAccelerated::SyncLightSpotDirection(int light_index) {
-    const auto& light = Pica::g_state.regs.lighting.light[light_index];
+    const auto& light = regs.lighting.light[light_index];
     const auto spot_direction =
         Common::Vec3f{light.spot_x / 2047.0f, light.spot_y / 2047.0f, light.spot_z / 2047.0f};
 
@@ -777,8 +771,7 @@ void RasterizerAccelerated::SyncLightSpotDirection(int light_index) {
 
 void RasterizerAccelerated::SyncLightDistanceAttenuationBias(int light_index) {
     float dist_atten_bias =
-        Pica::float20::FromRaw(Pica::g_state.regs.lighting.light[light_index].dist_atten_bias)
-            .ToFloat32();
+        Pica::float20::FromRaw(regs.lighting.light[light_index].dist_atten_bias).ToFloat32();
 
     if (dist_atten_bias != uniform_block_data.data.light_src[light_index].dist_atten_bias) {
         uniform_block_data.data.light_src[light_index].dist_atten_bias = dist_atten_bias;
@@ -788,8 +781,7 @@ void RasterizerAccelerated::SyncLightDistanceAttenuationBias(int light_index) {
 
 void RasterizerAccelerated::SyncLightDistanceAttenuationScale(int light_index) {
     float dist_atten_scale =
-        Pica::float20::FromRaw(Pica::g_state.regs.lighting.light[light_index].dist_atten_scale)
-            .ToFloat32();
+        Pica::float20::FromRaw(regs.lighting.light[light_index].dist_atten_scale).ToFloat32();
 
     if (dist_atten_scale != uniform_block_data.data.light_src[light_index].dist_atten_scale) {
         uniform_block_data.data.light_src[light_index].dist_atten_scale = dist_atten_scale;
@@ -798,7 +790,7 @@ void RasterizerAccelerated::SyncLightDistanceAttenuationScale(int light_index) {
 }
 
 void RasterizerAccelerated::SyncShadowBias() {
-    const auto& shadow = Pica::g_state.regs.framebuffer.shadow;
+    const auto& shadow = regs.framebuffer.shadow;
     float constant = Pica::float16::FromRaw(shadow.constant).ToFloat32();
     float linear = Pica::float16::FromRaw(shadow.linear).ToFloat32();
 
@@ -811,7 +803,7 @@ void RasterizerAccelerated::SyncShadowBias() {
 }
 
 void RasterizerAccelerated::SyncShadowTextureBias() {
-    int bias = Pica::g_state.regs.texturing.shadow.bias << 1;
+    int bias = regs.texturing.shadow.bias << 1;
     if (bias != uniform_block_data.data.shadow_texture_bias) {
         uniform_block_data.data.shadow_texture_bias = bias;
         uniform_block_data.dirty = true;
@@ -819,7 +811,7 @@ void RasterizerAccelerated::SyncShadowTextureBias() {
 }
 
 void RasterizerAccelerated::SyncTextureLodBias(int tex_index) {
-    const auto pica_textures = Pica::g_state.regs.texturing.GetTextures();
+    const auto pica_textures = regs.texturing.GetTextures();
     const float bias = pica_textures[tex_index].config.lod.bias / 256.0f;
     if (bias != uniform_block_data.data.tex_lod_bias[tex_index]) {
         uniform_block_data.data.tex_lod_bias[tex_index] = bias;
@@ -828,7 +820,7 @@ void RasterizerAccelerated::SyncTextureLodBias(int tex_index) {
 }
 
 void RasterizerAccelerated::SyncClipCoef() {
-    const auto raw_clip_coef = Pica::g_state.regs.rasterizer.GetClipCoef();
+    const auto raw_clip_coef = regs.rasterizer.GetClipCoef();
     const Common::Vec4f new_clip_coef = {raw_clip_coef.x.ToFloat32(), raw_clip_coef.y.ToFloat32(),
                                          raw_clip_coef.z.ToFloat32(), raw_clip_coef.w.ToFloat32()};
     if (new_clip_coef != uniform_block_data.data.clip_coef) {

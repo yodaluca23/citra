@@ -11,10 +11,6 @@
 #include "video_core/renderer_opengl/gl_stream_buffer.h"
 #include "video_core/renderer_opengl/gl_texture_runtime.h"
 
-namespace Memory {
-class MemorySystem;
-}
-
 namespace Frontend {
 class EmuWindow;
 }
@@ -138,7 +134,6 @@ private:
     bool SetupGeometryShader();
 
 private:
-    Memory::MemorySystem& memory;
     Driver& driver;
     OpenGLState state;
     TextureRuntime runtime;
