@@ -74,9 +74,6 @@ public:
         return false;
     }
 
-    /// Increase/decrease the number of surface in pages touching the specified region
-    virtual void UpdatePagesCachedCount(PAddr addr, u32 size, int delta) {}
-
     /// Loads disk cached rasterizer data before rendering
     virtual void LoadDiskResources(const std::atomic_bool& stop_loading,
                                    const DiskResourceLoadCallback& callback) {}

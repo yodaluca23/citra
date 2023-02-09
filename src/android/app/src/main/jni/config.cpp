@@ -122,7 +122,7 @@ void Config::ReadValues() {
         !Settings::values
              .renderer_debug; ///< Enabling debug renderer force disables async recording
     Settings::values.async_shader_compilation =
-        sdl2_config->GetBoolean("Renderer", "async_shader_compilation", false);
+        sdl2_config->GetBoolean("Renderer", "async_shader_compilation", true);
     Settings::values.spirv_shader_gen =
         sdl2_config->GetBoolean("Renderer", "spirv_shader_gen", true);
     Settings::values.use_hw_renderer = sdl2_config->GetBoolean("Renderer", "use_hw_renderer", true);
