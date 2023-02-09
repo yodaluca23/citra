@@ -24,43 +24,44 @@ inline T MakeInt(const u8* bytes) {
 
 template <PixelFormat format, bool converted>
 constexpr void DecodePixel(const u8* source, u8* dest) {
+    using namespace Common::Color;
     constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
 
     if constexpr (format == PixelFormat::RGBA8 && converted) {
-        const auto abgr = Common::Color::DecodeRGBA8(source);
+        const auto abgr = DecodeRGBA8(source);
         std::memcpy(dest, abgr.AsArray(), 4);
     } else if constexpr (format == PixelFormat::RGB8 && converted) {
-        const auto abgr = Common::Color::DecodeRGB8(source);
+        const auto abgr = DecodeRGB8(source);
         std::memcpy(dest, abgr.AsArray(), 4);
     } else if constexpr (format == PixelFormat::RGB565 && converted) {
-        const auto abgr = Common::Color::DecodeRGB565(source);
+        const auto abgr = DecodeRGB565(source);
         std::memcpy(dest, abgr.AsArray(), 4);
     } else if constexpr (format == PixelFormat::RGB5A1 && converted) {
-        const auto abgr = Common::Color::DecodeRGB5A1(source);
+        const auto abgr = DecodeRGB5A1(source);
         std::memcpy(dest, abgr.AsArray(), 4);
     } else if constexpr (format == PixelFormat::RGBA4 && converted) {
-        const auto abgr = Common::Color::DecodeRGBA4(source);
+        const auto abgr = DecodeRGBA4(source);
         std::memcpy(dest, abgr.AsArray(), 4);
     } else if constexpr (format == PixelFormat::IA8) {
-        const auto abgr = Common::Color::DecodeIA8(source);
+        const auto abgr = DecodeIA8(source);
         std::memcpy(dest, abgr.AsArray(), 4);
     } else if constexpr (format == PixelFormat::RG8) {
-        const auto abgr = Common::Color::DecodeRG8(source);
+        const auto abgr = DecodeRG8(source);
         std::memcpy(dest, abgr.AsArray(), 4);
     } else if constexpr (format == PixelFormat::I8) {
-        const auto abgr = Common::Color::DecodeI8(source);
+        const auto abgr = DecodeI8(source);
         std::memcpy(dest, abgr.AsArray(), 4);
     } else if constexpr (format == PixelFormat::A8) {
-        const auto abgr = Common::Color::DecodeA8(source);
+        const auto abgr = DecodeA8(source);
         std::memcpy(dest, abgr.AsArray(), 4);
     } else if constexpr (format == PixelFormat::IA4) {
-        const auto abgr = Common::Color::DecodeIA4(source);
+        const auto abgr = DecodeIA4(source);
         std::memcpy(dest, abgr.AsArray(), 4);
     } else if constexpr (format == PixelFormat::D16 && converted) {
-        const auto d32 = Common::Color::DecodeD16(source) / 65535.f;
+        const auto d32 = DecodeD16(source) / 65535.f;
         std::memcpy(dest, &d32, sizeof(d32));
     } else if constexpr (format == PixelFormat::D24 && converted) {
-        const auto d32 = Common::Color::DecodeD24(source) / 16777215.f;
+        const auto d32 = DecodeD24(source) / 16777215.f;
         std::memcpy(dest, &d32, sizeof(d32));
     } else if constexpr (format == PixelFormat::D24S8) {
         const u32 d24s8 = std::rotl(MakeInt<u32>(source), 8);
@@ -117,56 +118,57 @@ constexpr void DecodePixelETC1(u32 x, u32 y, const u8* source_tile, u8* dest_pix
 
 template <PixelFormat format, bool converted>
 constexpr void EncodePixel(const u8* source, u8* dest) {
+    using namespace Common::Color;
     constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
 
     if constexpr (format == PixelFormat::RGBA8 && converted) {
         Common::Vec4<u8> rgba;
         std::memcpy(rgba.AsArray(), source, 4);
-        Common::Color::EncodeRGBA8(rgba, dest);
+        EncodeRGBA8(rgba, dest);
     } else if constexpr (format == PixelFormat::RGB8 && converted) {
         Common::Vec4<u8> rgba;
         std::memcpy(rgba.AsArray(), source, 4);
-        Common::Color::EncodeRGB8(rgba, dest);
+        EncodeRGB8(rgba, dest);
     } else if constexpr (format == PixelFormat::RGB565 && converted) {
         Common::Vec4<u8> rgba;
         std::memcpy(rgba.AsArray(), source, 4);
-        Common::Color::EncodeRGB565(rgba, dest);
+        EncodeRGB565(rgba, dest);
     } else if constexpr (format == PixelFormat::RGB5A1 && converted) {
         Common::Vec4<u8> rgba;
         std::memcpy(rgba.AsArray(), source, 4);
-        Common::Color::EncodeRGB5A1(rgba, dest);
+        EncodeRGB5A1(rgba, dest);
     } else if constexpr (format == PixelFormat::RGBA4 && converted) {
         Common::Vec4<u8> rgba;
         std::memcpy(rgba.AsArray(), source, 4);
-        Common::Color::EncodeRGBA4(rgba, dest);
+        EncodeRGBA4(rgba, dest);
     } else if constexpr (format == PixelFormat::IA8) {
         Common::Vec4<u8> rgba;
         std::memcpy(rgba.AsArray(), source, 4);
-        Common::Color::EncodeIA8(rgba, dest);
+        EncodeIA8(rgba, dest);
     } else if constexpr (format == PixelFormat::RG8) {
         Common::Vec4<u8> rgba;
         std::memcpy(rgba.AsArray(), source, 4);
-        Common::Color::EncodeRG8(rgba, dest);
+        EncodeRG8(rgba, dest);
     } else if constexpr (format == PixelFormat::I8) {
         Common::Vec4<u8> rgba;
         std::memcpy(rgba.AsArray(), source, 4);
-        Common::Color::EncodeI8(rgba, dest);
+        EncodeI8(rgba, dest);
     } else if constexpr (format == PixelFormat::A8) {
         Common::Vec4<u8> rgba;
         std::memcpy(rgba.AsArray(), source, 4);
-        Common::Color::EncodeA8(rgba, dest);
+        EncodeA8(rgba, dest);
     } else if constexpr (format == PixelFormat::IA4) {
         Common::Vec4<u8> rgba;
         std::memcpy(rgba.AsArray(), source, 4);
-        Common::Color::EncodeIA4(rgba, dest);
+        EncodeIA4(rgba, dest);
     } else if constexpr (format == PixelFormat::D16 && converted) {
         float d32;
         std::memcpy(&d32, source, sizeof(d32));
-        Common::Color::EncodeD16(d32 * 0xFFFF, dest);
+        EncodeD16(d32 * 0xFFFF, dest);
     } else if constexpr (format == PixelFormat::D24 && converted) {
         float d32;
         std::memcpy(&d32, source, sizeof(d32));
-        Common::Color::EncodeD24(d32 * 0xFFFFFF, dest);
+        EncodeD24(d32 * 0xFFFFFF, dest);
     } else if constexpr (format == PixelFormat::D24S8) {
         const u32 s8d24 = std::rotr(MakeInt<u32>(source), 8);
         std::memcpy(dest, &s8d24, sizeof(u32));
