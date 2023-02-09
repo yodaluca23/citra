@@ -306,6 +306,7 @@ private:
     u32 present_queue_family_index{0};
     u32 graphics_queue_family_index{0};
     bool triangle_fan_supported{true};
+    bool image_view_reinterpretation{true};
     u32 min_vertex_stride_alignment{1};
     bool timeline_semaphores{};
     bool extended_dynamic_state{};

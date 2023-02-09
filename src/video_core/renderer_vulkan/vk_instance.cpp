@@ -679,6 +679,8 @@ bool Instance::CreateDevice() {
     if (has_portability_subset) {
         FEAT_SET(vk::PhysicalDevicePortabilitySubsetFeaturesKHR, triangleFans,
                  triangle_fan_supported)
+        FEAT_SET(vk::PhysicalDevicePortabilitySubsetFeaturesKHR, imageViewFormatReinterpretation,
+                 image_view_reinterpretation)
         PROP_GET(vk::PhysicalDevicePortabilitySubsetPropertiesKHR,
                  minVertexInputBindingStrideAlignment, min_vertex_stride_alignment)
     } else {
