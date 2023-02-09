@@ -122,6 +122,9 @@ private:
     void SyncAndUploadLUTs();
     void SyncAndUploadLUTsLF();
 
+    /// Syncs all enabled PICA texture units
+    void SyncTextureUnits(Surface* const color_surface);
+
     /// Upload the uniform blocks to the uniform buffer object
     void UploadUniforms(bool accelerate_draw);
 
@@ -148,6 +151,9 @@ private:
 
     /// Creates the vertex layout struct used for software shader pipelines
     void MakeSoftwareVertexLayout();
+
+    /// Binds a sampler to the specified texture unit
+    void BindSampler(u32 unit, SamplerInfo& info, const Pica::TexturingRegs::TextureConfig& config);
 
     /// Creates a new sampler object
     vk::Sampler CreateSampler(const SamplerInfo& info);

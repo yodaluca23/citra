@@ -170,21 +170,6 @@ public:
             vk::ImageAspectFlags aspect, TextureRuntime& runtime);
     ~Surface() override;
 
-    /// Uploads pixel data in staging to a rectangle region of the surface texture
-    void Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging);
-
-    /// Downloads pixel data to staging from a rectangle region of the surface texture
-    void Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging);
-
-    /// Returns the bpp of the internal surface format
-    u32 GetInternalBytesPerPixel() const;
-
-    /// Returns the access flags indicative of the surface
-    vk::AccessFlags AccessFlags() const noexcept;
-
-    /// Returns the pipeline stage flags indicative of the surface
-    vk::PipelineStageFlags PipelineStageFlags() const noexcept;
-
     /// Returns the surface aspect
     vk::ImageAspectFlags Aspect() const noexcept {
         return alloc.aspect;
@@ -200,34 +185,32 @@ public:
         return alloc.image_view;
     }
 
+    /// Uploads pixel data in staging to a rectangle region of the surface texture
+    void Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging);
+
+    /// Downloads pixel data to staging from a rectangle region of the surface texture
+    void Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging);
+
+    /// Returns the bpp of the internal surface format
+    u32 GetInternalBytesPerPixel() const;
+
+    /// Returns the access flags indicative of the surface
+    vk::AccessFlags AccessFlags() const noexcept;
+
+    /// Returns the pipeline stage flags indicative of the surface
+    vk::PipelineStageFlags PipelineStageFlags() const noexcept;
+
     /// Returns an image view used to create a framebuffer
-    vk::ImageView FramebufferView() noexcept {
-        is_framebuffer = true;
-        return alloc.base_view;
-    }
+    vk::ImageView FramebufferView() noexcept;
 
-    /// Returns the depth only image view of the surface, null otherwise
-    vk::ImageView DepthView() const noexcept {
-        return alloc.depth_view;
-    }
+    /// Returns the depth only image view of the surface
+    vk::ImageView DepthView() noexcept;
 
-    /// Returns the stencil only image view of the surface, null otherwise
-    vk::ImageView StencilView() const noexcept {
-        return alloc.stencil_view;
-    }
+    /// Returns the stencil only image view of the surface
+    vk::ImageView StencilView() noexcept;
 
     /// Returns the R32 image view used for atomic load/store
-    vk::ImageView StorageView() noexcept {
-        if (!alloc.storage_view) {
-            LOG_CRITICAL(Render_Vulkan,
-                         "Surface with pixel format {} and internal format {} "
-                         "does not provide requested storage view!",
-                         VideoCore::PixelFormatAsString(pixel_format), vk::to_string(alloc.format));
-            UNREACHABLE();
-        }
-        is_storage = true;
-        return alloc.storage_view;
-    }
+    vk::ImageView StorageView() noexcept;
 
 private:
     /// Uploads pixel data to scaled texture

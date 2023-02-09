@@ -19,6 +19,8 @@ MICROPROFILE_DEFINE(Vulkan_Download, "Vulkan", "Texture Download", MP_RGB(128, 1
 
 namespace Vulkan {
 
+using VideoCore::PixelFormatAsString;
+
 struct RecordParams {
     vk::ImageAspectFlags aspect;
     vk::Filter filter;
@@ -127,10 +129,10 @@ TextureRuntime::~TextureRuntime() {
 
     for (const auto& [key, alloc] : texture_recycler) {
         vmaDestroyImage(allocator, alloc.image, alloc.allocation);
-        device.destroyImageView(alloc.image_view);
-        if (alloc.base_view) {
+        if (alloc.base_view && alloc.base_view != alloc.image_view) {
             device.destroyImageView(alloc.base_view);
         }
+        device.destroyImageView(alloc.image_view);
         if (alloc.depth_view) {
             device.destroyImageView(alloc.depth_view);
             device.destroyImageView(alloc.stencil_view);
@@ -264,59 +266,8 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
 
     vk::Device device = instance.GetDevice();
     alloc.image_view = device.createImageView(view_info);
-
-    // Also create a base mip view in case this is used as an attachment
-    if (levels > 1) [[likely]] {
-        const vk::ImageViewCreateInfo base_view_info = {
-            .image = alloc.image,
-            .viewType = view_type,
-            .format = format,
-            .subresourceRange{
-                .aspectMask = alloc.aspect,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = layers,
-            },
-        };
-
-        alloc.base_view = device.createImageView(base_view_info);
-    }
-
-    // Create seperate depth/stencil views in case this gets reinterpreted with a compute shader
-    if (alloc.aspect & vk::ImageAspectFlagBits::eStencil) {
-        vk::ImageViewCreateInfo view_info = {
-            .image = alloc.image,
-            .viewType = view_type,
-            .format = format,
-            .subresourceRange{
-                .aspectMask = vk::ImageAspectFlagBits::eDepth,
-                .baseMipLevel = 0,
-                .levelCount = levels,
-                .baseArrayLayer = 0,
-                .layerCount = layers,
-            },
-        };
-
-        alloc.depth_view = device.createImageView(view_info);
-        view_info.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eStencil;
-        alloc.stencil_view = device.createImageView(view_info);
-    }
-
-    if (create_storage_view) {
-        const vk::ImageViewCreateInfo storage_view_info = {
-            .image = alloc.image,
-            .viewType = view_type,
-            .format = vk::Format::eR32Uint,
-            .subresourceRange{
-                .aspectMask = alloc.aspect,
-                .baseMipLevel = 0,
-                .levelCount = levels,
-                .baseArrayLayer = 0,
-                .layerCount = layers,
-            },
-        };
-        alloc.storage_view = device.createImageView(storage_view_info);
+    if (levels == 1) {
+        alloc.base_view = alloc.image_view;
     }
 
     renderpass_cache.ExitRenderpass();
@@ -1049,6 +1000,100 @@ vk::PipelineStageFlags Surface::PipelineStageFlags() const noexcept {
            (is_framebuffer ? attachment_flags : vk::PipelineStageFlagBits::eNone) |
            (is_storage ? vk::PipelineStageFlagBits::eComputeShader
                        : vk::PipelineStageFlagBits::eNone);
+}
+
+vk::ImageView Surface::FramebufferView() noexcept {
+    vk::ImageView& base_view = alloc.base_view;
+    if (base_view) {
+        return base_view;
+    }
+
+    const vk::ImageViewCreateInfo base_view_info = {
+        .image = alloc.image,
+        .viewType = vk::ImageViewType::e2D,
+        .format = instance.GetTraits(pixel_format).native,
+        .subresourceRange{
+            .aspectMask = alloc.aspect,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = VK_REMAINING_ARRAY_LAYERS,
+        },
+    };
+    base_view = instance.GetDevice().createImageView(base_view_info);
+    return base_view;
+}
+
+vk::ImageView Surface::DepthView() noexcept {
+    vk::ImageView& depth_view = alloc.depth_view;
+    if (depth_view) {
+        return depth_view;
+    }
+
+    const vk::ImageViewCreateInfo view_info = {
+        .image = alloc.image,
+        .viewType = vk::ImageViewType::e2D,
+        .format = instance.GetTraits(pixel_format).native,
+        .subresourceRange{
+            .aspectMask = vk::ImageAspectFlagBits::eDepth,
+            .baseMipLevel = 0,
+            .levelCount = VK_REMAINING_MIP_LEVELS,
+            .baseArrayLayer = 0,
+            .layerCount = VK_REMAINING_ARRAY_LAYERS,
+        },
+    };
+
+    depth_view = instance.GetDevice().createImageView(view_info);
+    return depth_view;
+}
+
+vk::ImageView Surface::StencilView() noexcept {
+    vk::ImageView& stencil_view = alloc.stencil_view;
+    if (stencil_view) {
+        return stencil_view;
+    }
+
+    const vk::ImageViewCreateInfo view_info = {
+        .image = alloc.image,
+        .viewType = vk::ImageViewType::e2D,
+        .format = instance.GetTraits(pixel_format).native,
+        .subresourceRange{
+            .aspectMask = vk::ImageAspectFlagBits::eStencil,
+            .baseMipLevel = 0,
+            .levelCount = VK_REMAINING_MIP_LEVELS,
+            .baseArrayLayer = 0,
+            .layerCount = VK_REMAINING_ARRAY_LAYERS,
+        },
+    };
+
+    stencil_view = instance.GetDevice().createImageView(view_info);
+    return stencil_view;
+}
+
+vk::ImageView Surface::StorageView() noexcept {
+    vk::ImageView& storage_view = alloc.storage_view;
+    if (storage_view) {
+        return storage_view;
+    }
+
+    ASSERT_MSG(pixel_format == VideoCore::PixelFormat::RGBA8,
+               "Attempted to retrieve storage view from unsupported surface with format {}",
+               PixelFormatAsString(pixel_format));
+
+    const vk::ImageViewCreateInfo storage_view_info = {
+        .image = alloc.image,
+        .viewType = vk::ImageViewType::e2D,
+        .format = vk::Format::eR32Uint,
+        .subresourceRange{
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .baseMipLevel = 0,
+            .levelCount = VK_REMAINING_MIP_LEVELS,
+            .baseArrayLayer = 0,
+            .layerCount = VK_REMAINING_ARRAY_LAYERS,
+        },
+    };
+    storage_view = instance.GetDevice().createImageView(storage_view_info);
+    return storage_view;
 }
 
 void Surface::ScaledUpload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging) {

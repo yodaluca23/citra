@@ -11,6 +11,7 @@
 #include "common/alignment.h"
 #include "common/common_funcs.h"
 #include "common/common_types.h"
+#include "common/logging/log.h"
 #include "common/polyfill_thread.h"
 #include "video_core/renderer_vulkan/vk_master_semaphore.h"
 #include "video_core/renderer_vulkan/vk_resource_pool.h"
@@ -98,6 +99,7 @@ public:
     void Wait(u64 tick) {
         if (tick >= master_semaphore.CurrentTick()) {
             // Make sure we are not waiting for the current tick without signalling
+            LOG_WARNING(Render_Vulkan, "Flushing current tick");
             Flush();
         }
         master_semaphore.Wait(tick);
