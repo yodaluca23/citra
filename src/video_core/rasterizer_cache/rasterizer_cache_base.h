@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <optional>
 #include <unordered_map>
+#include <boost/icl/interval_map.hpp>
 #include <boost/range/iterator_range.hpp>
 #include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/rasterizer_cache/surface_params.h"
