@@ -134,23 +134,25 @@ bool RasterizerCache<T>::BlitSurfaces(const Surface& src_surface, Common::Rectan
     // 2. No flipping (if the bottom value is bigger than the top this indicates texture flip)
     if (src_rect.GetWidth() == dst_rect.GetWidth() &&
         src_rect.GetHeight() == dst_rect.GetHeight() && src_rect.bottom < src_rect.top) {
-        const TextureCopy texture_copy = {.src_level = 0,
-                                          .dst_level = 0,
-                                          .src_layer = 0,
-                                          .dst_layer = 0,
-                                          .src_offset = {src_rect.left, src_rect.bottom},
-                                          .dst_offset = {dst_rect.left, dst_rect.bottom},
-                                          .extent = {src_rect.GetWidth(), src_rect.GetHeight()}};
-
+        const TextureCopy texture_copy = {
+            .src_level = 0,
+            .dst_level = 0,
+            .src_layer = 0,
+            .dst_layer = 0,
+            .src_offset = {src_rect.left, src_rect.bottom},
+            .dst_offset = {dst_rect.left, dst_rect.bottom},
+            .extent = {src_rect.GetWidth(), src_rect.GetHeight()},
+        };
         return runtime.CopyTextures(*src_surface, *dst_surface, texture_copy);
     } else {
-        const TextureBlit texture_blit = {.src_level = 0,
-                                          .dst_level = 0,
-                                          .src_layer = 0,
-                                          .dst_layer = 0,
-                                          .src_rect = src_rect,
-                                          .dst_rect = dst_rect};
-
+        const TextureBlit texture_blit = {
+            .src_level = 0,
+            .dst_level = 0,
+            .src_layer = 0,
+            .dst_layer = 0,
+            .src_rect = src_rect,
+            .dst_rect = dst_rect,
+        };
         return runtime.BlitTextures(*src_surface, *dst_surface, texture_blit);
     }
 }
@@ -185,14 +187,14 @@ void RasterizerCache<T>::CopySurface(const Surface& src_surface, const Surface& 
     }
 
     if (src_surface->CanSubRect(subrect_params)) {
-        const TextureBlit texture_blit = {.src_level = 0,
-                                          .dst_level = 0,
-                                          .src_layer = 0,
-                                          .dst_layer = 0,
-                                          .src_rect = src_surface->GetScaledSubRect(subrect_params),
-                                          .dst_rect =
-                                              dst_surface->GetScaledSubRect(subrect_params)};
-
+        const TextureBlit texture_blit = {
+            .src_level = 0,
+            .dst_level = 0,
+            .src_layer = 0,
+            .dst_layer = 0,
+            .src_rect = src_surface->GetScaledSubRect(subrect_params),
+            .dst_rect = dst_surface->GetScaledSubRect(subrect_params),
+        };
         runtime.BlitTextures(*src_surface, *dst_surface, texture_blit);
         return;
     }
@@ -482,13 +484,14 @@ auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> cons
                 ValidateSurface(face, face->addr, face->size);
             }
 
-            const TextureBlit texture_blit = {.src_level = 0,
-                                              .dst_level = 0,
-                                              .src_layer = 0,
-                                              .dst_layer = static_cast<u32>(i),
-                                              .src_rect = face->GetScaledRect(),
-                                              .dst_rect = Rect2D{0, scaled_size, scaled_size, 0}};
-
+            const TextureBlit texture_blit = {
+                .src_level = 0,
+                .dst_level = 0,
+                .src_layer = 0,
+                .dst_layer = static_cast<u32>(i),
+                .src_rect = face->GetScaledRect(),
+                .dst_rect = Rect2D{0, scaled_size, scaled_size, 0},
+            };
             runtime.BlitTextures(*face, *cube, texture_blit);
             watcher->Validate();
         }
