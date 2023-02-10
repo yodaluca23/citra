@@ -564,25 +564,29 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
     // The game is trying to use a surface as a texture and framebuffer at the same time
     // which causes unpredictable behavior on the host.
     // Making a copy to sample from eliminates this issue and seems to be fairly cheap.
-    OGLTexture temp_tex;
     if (need_duplicate_texture) {
-        temp_tex =
-            runtime.Allocate(color_surface->GetScaledWidth(), color_surface->GetScaledHeight(),
-                             color_surface->pixel_format, color_surface->texture_type);
-
-        temp_tex.CopyFrom(color_surface->texture, GL_TEXTURE_2D, color_surface->max_level + 1,
-                          color_surface->GetScaledWidth(), color_surface->GetScaledHeight());
+        Surface temp{*color_surface, runtime};
+        const VideoCore::TextureCopy copy = {
+            .src_level = 0,
+            .dst_level = 0,
+            .src_layer = 0,
+            .dst_layer = 0,
+            .src_offset = {0, 0},
+            .dst_offset = {0, 0},
+            .extent = {temp.GetScaledWidth(), temp.GetScaledHeight()},
+        };
+        runtime.CopyTextures(*color_surface, temp, copy);
 
         for (auto& unit : state.texture_units) {
             if (unit.texture_2d == color_surface->texture.handle) {
-                unit.texture_2d = temp_tex.handle;
+                unit.texture_2d = temp.Handle();
             }
         }
         for (auto shadow_unit : {&state.image_shadow_texture_nx, &state.image_shadow_texture_ny,
                                  &state.image_shadow_texture_nz, &state.image_shadow_texture_px,
                                  &state.image_shadow_texture_py, &state.image_shadow_texture_pz}) {
             if (*shadow_unit == color_surface->texture.handle) {
-                *shadow_unit = temp_tex.handle;
+                *shadow_unit = temp.Handle();
             }
         }
     }

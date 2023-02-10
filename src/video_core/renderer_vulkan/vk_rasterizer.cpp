@@ -695,10 +695,10 @@ void RasterizerVulkan::SyncTextureUnits(Surface* const color_surface) {
                         .dst_level = 0,
                         .src_layer = 0,
                         .dst_layer = 0,
-                        .src_offset = VideoCore::Offset{0, 0},
-                        .dst_offset = VideoCore::Offset{0, 0},
-                        .extent = VideoCore::Extent{temp.GetScaledWidth(), temp.GetScaledHeight()}};
-
+                        .src_offset = {0, 0},
+                        .dst_offset = {0, 0},
+                        .extent = {temp.GetScaledWidth(), temp.GetScaledHeight()},
+                    };
                     runtime.CopyTextures(*color_surface, temp, copy);
                     pipeline_cache.BindTexture(texture_index, temp.ImageView());
                 } else {

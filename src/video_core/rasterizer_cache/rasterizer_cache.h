@@ -20,6 +20,14 @@ RasterizerCache<T>::RasterizerCache(Memory::MemorySystem& memory_, TextureRuntim
                                               VideoCore::GetResolutionScaleFactor()} {}
 
 template <class T>
+RasterizerCache<T>::~RasterizerCache() {
+#ifndef ANDROID
+    // This is for switching renderers, which is unsupported on Android, and costly on shutdown
+    ClearAll(false);
+#endif
+}
+
+template <class T>
 template <MatchFlags find_flags>
 auto RasterizerCache<T>::FindMatch(const SurfaceCache& surface_cache, const SurfaceParams& params,
                                    ScaleMatch match_scale_type,
@@ -326,7 +334,8 @@ template <class T>
 auto RasterizerCache<T>::GetTextureSurface(const Pica::TexturingRegs::FullTextureConfig& config)
     -> Surface {
     const auto info = Pica::Texture::TextureInfo::FromPicaRegister(config.config, config.format);
-    return GetTextureSurface(info, config.config.lod.max_level);
+    const u32 max_level = MipLevels(info.width, info.height, config.config.lod.max_level) - 1;
+    return GetTextureSurface(info, max_level);
 }
 
 template <class T>
@@ -340,9 +349,9 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& inf
     params.addr = info.physical_address;
     params.width = info.width;
     params.height = info.height;
+    params.levels = max_level + 1;
     params.is_tiled = true;
     params.pixel_format = PixelFormatFromTextureFormat(info.format);
-    params.res_scale = /*texture_filterer->IsNull() ?*/ 1 /*: resolution_scale_factor*/;
     params.UpdateParams();
 
     const u32 min_width = info.width >> max_level;
@@ -368,18 +377,8 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& inf
         if (max_level >= 8) {
             // Since PICA only supports texture size between 8 and 1024, there are at most eight
             // possible mipmap levels including the base.
-            LOG_CRITICAL(Render_OpenGL, "Unsupported mipmap level {}", max_level);
+            LOG_CRITICAL(HW_GPU, "Unsupported mipmap level {}", max_level);
             return nullptr;
-        }
-
-        // Allocate more mipmap levels if necessary
-        if (surface->max_level < max_level) {
-            /*if (!texture_filterer->IsNull()) {
-                // TODO: proper mipmap support for custom textures
-                runtime.GenerateMipmaps(surface->texture, max_level);
-            }*/
-
-            surface->max_level = max_level;
         }
 
         // Blit mipmaps that have been invalidated
@@ -391,6 +390,7 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& inf
             surface_params.width /= 2;
             surface_params.height /= 2;
             surface_params.stride = 0; // reset stride and let UpdateParams re-initialize it
+            surface_params.levels = 1;
             surface_params.UpdateParams();
 
             auto& watcher = surface->level_watchers[level - 1];
@@ -409,17 +409,15 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& inf
                     ValidateSurface(level_surface, level_surface->addr, level_surface->size);
                 }
 
-                if (/*texture_filterer->IsNull()*/ true) {
-                    const TextureBlit texture_blit = {.src_level = 0,
-                                                      .dst_level = level,
-                                                      .src_layer = 0,
-                                                      .dst_layer = 0,
-                                                      .src_rect = level_surface->GetScaledRect(),
-                                                      .dst_rect = surface_params.GetScaledRect()};
-
-                    runtime.BlitTextures(*level_surface, *surface, texture_blit);
-                }
-
+                const TextureBlit texture_blit = {
+                    .src_level = 0,
+                    .dst_level = level,
+                    .src_layer = 0,
+                    .dst_layer = 0,
+                    .src_rect = level_surface->GetScaledRect(),
+                    .dst_rect = surface_params.GetScaledRect(),
+                };
+                runtime.BlitTextures(*level_surface, *surface, texture_blit);
                 watcher->Validate();
             }
         }

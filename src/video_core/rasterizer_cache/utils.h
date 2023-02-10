@@ -76,9 +76,10 @@ struct BufferCopy {
 
 struct HostTextureTag {
     PixelFormat format{};
+    TextureType type{};
     u32 width = 0;
     u32 height = 0;
-    u32 layers = 1;
+    u32 levels = 1;
 
     auto operator<=>(const HostTextureTag&) const noexcept = default;
 
@@ -105,6 +106,8 @@ struct TextureCubeConfig {
 };
 
 [[nodiscard]] ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_data);
+
+u32 MipLevels(u32 width, u32 height, u32 max_level);
 
 /**
  * Encodes a linear texture to the expected linear or tiled format.

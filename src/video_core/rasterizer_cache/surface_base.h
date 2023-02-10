@@ -86,7 +86,6 @@ public:
     bool registered = false;
     SurfaceRegions invalid_regions;
     std::array<std::shared_ptr<Watcher>, 7> level_watchers;
-    u32 max_level = 0;
     std::array<u8, 4> fill_data;
     u32 fill_size = 0;
 

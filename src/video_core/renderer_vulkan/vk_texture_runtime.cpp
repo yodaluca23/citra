@@ -19,6 +19,8 @@ MICROPROFILE_DEFINE(Vulkan_Download, "Vulkan", "Texture Download", MP_RGB(128, 1
 
 namespace Vulkan {
 
+using VideoCore::GetFormatType;
+using VideoCore::MipLevels;
 using VideoCore::PixelFormatAsString;
 
 struct RecordParams {
@@ -161,13 +163,15 @@ void TextureRuntime::Finish() {
     scheduler.Finish();
 }
 
-ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
-                                    VideoCore::TextureType type) {
+ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, u32 levels,
+                                    VideoCore::PixelFormat format, VideoCore::TextureType type) {
     const FormatTraits traits = instance.GetTraits(format);
-    return Allocate(width, height, format, type, traits.native, traits.usage, traits.aspect);
+    return Allocate(width, height, levels, format, type, traits.native, traits.usage,
+                    traits.aspect);
 }
 
-ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelFormat pixel_format,
+ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, u32 levels,
+                                    VideoCore::PixelFormat pixel_format,
                                     VideoCore::TextureType type, vk::Format format,
                                     vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect) {
     MICROPROFILE_SCOPE(Vulkan_ImageAlloc);
@@ -185,6 +189,7 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
         .type = type,
         .width = width,
         .height = height,
+        .levels = levels,
     };
 
     // Attempt to recycle an unused allocation
@@ -195,7 +200,6 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
     }
 
     const bool create_storage_view = pixel_format == VideoCore::PixelFormat::RGBA8;
-    const u32 levels = std::log2(std::max(width, height)) + 1;
     const u32 layers = type == VideoCore::TextureType::CubeMap ? 6 : 1;
 
     vk::ImageCreateFlags flags;
@@ -750,7 +754,7 @@ Surface::Surface(const VideoCore::SurfaceParams& params, TextureRuntime& runtime
       scheduler{runtime.GetScheduler()}, traits{instance.GetTraits(pixel_format)} {
 
     if (pixel_format != VideoCore::PixelFormat::Invalid) {
-        alloc = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), params.pixel_format,
+        alloc = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), levels, params.pixel_format,
                                  texture_type);
     }
 }
@@ -760,8 +764,8 @@ Surface::Surface(const VideoCore::SurfaceParams& params, vk::Format format,
     : VideoCore::SurfaceBase<Surface>{params}, runtime{runtime}, instance{runtime.GetInstance()},
       scheduler{runtime.GetScheduler()} {
     if (format != vk::Format::eUndefined) {
-        alloc = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), pixel_format, texture_type,
-                                 format, usage, aspect);
+        alloc = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), levels, pixel_format,
+                                 texture_type, format, usage, aspect);
     }
 }
 

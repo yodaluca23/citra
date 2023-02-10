@@ -74,6 +74,17 @@ void EncodeTexture(const SurfaceParams& surface_info, PAddr start_addr, PAddr en
     UNREACHABLE();
 }
 
+u32 MipLevels(u32 width, u32 height, u32 max_level) {
+    u32 levels = 1;
+    while (width > 8 && height > 8) {
+        levels++;
+        width >>= 1;
+        height >>= 1;
+    }
+
+    return std::min(levels, max_level + 1);
+}
+
 void DecodeTexture(const SurfaceParams& surface_info, PAddr start_addr, PAddr end_addr,
                    std::span<u8> source, std::span<u8> dest, bool convert) {
     const u32 func_index = static_cast<u32>(surface_info.pixel_format);

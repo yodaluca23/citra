@@ -51,7 +51,7 @@ public:
     void Finish() const {}
 
     /// Allocates an OpenGL texture with the specified dimentions and format
-    OGLTexture Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
+    OGLTexture Allocate(u32 width, u32 height, u32 levels, VideoCore::PixelFormat format,
                         VideoCore::TextureType type);
 
     /// Fills the rectangle of the texture with the clear value provided
@@ -103,6 +103,11 @@ class Surface : public VideoCore::SurfaceBase<Surface> {
 public:
     Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime);
     ~Surface() override;
+
+    /// Returns the surface image handle
+    GLuint Handle() const noexcept {
+        return texture.handle;
+    }
 
     /// Uploads pixel data in staging to a rectangle region of the surface texture
     void Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging);

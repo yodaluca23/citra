@@ -52,51 +52,6 @@ void OGLTexture::Release() {
     handle = 0;
 }
 
-void OGLTexture::Allocate(GLenum target, GLsizei levels, GLenum internalformat, GLsizei width,
-                          GLsizei height, GLsizei depth) {
-    GLuint old_tex = OpenGLState::GetCurState().texture_units[0].texture_2d;
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(target, handle);
-
-    switch (target) {
-    case GL_TEXTURE_1D:
-    case GL_TEXTURE:
-        glTexStorage1D(target, levels, internalformat, width);
-        break;
-    case GL_TEXTURE_2D:
-    case GL_TEXTURE_1D_ARRAY:
-    case GL_TEXTURE_RECTANGLE:
-    case GL_TEXTURE_CUBE_MAP:
-        glTexStorage2D(target, levels, internalformat, width, height);
-        break;
-    case GL_TEXTURE_3D:
-    case GL_TEXTURE_2D_ARRAY:
-    case GL_TEXTURE_CUBE_MAP_ARRAY:
-        glTexStorage3D(target, levels, internalformat, width, height, depth);
-        break;
-    }
-
-    glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    glBindTexture(target, old_tex);
-}
-
-void OGLTexture::CopyFrom(const OGLTexture& other, GLenum target, GLsizei levels, GLsizei width,
-                          GLsizei height) {
-    GLuint old_tex = OpenGLState::GetCurState().texture_units[0].texture_2d;
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, handle);
-
-    for (GLsizei level = 0; level < levels; level++) {
-        glCopyImageSubData(other.handle, target, level, 0, 0, 0, handle, target, level, 0, 0, 0,
-                           width >> level, height >> level, 1);
-    }
-
-    glBindTexture(GL_TEXTURE_2D, old_tex);
-}
-
 void OGLSampler::Create() {
     if (handle != 0) {
         return;

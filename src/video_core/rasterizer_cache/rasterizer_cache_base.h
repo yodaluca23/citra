@@ -72,7 +72,7 @@ private:
 
 public:
     RasterizerCache(Memory::MemorySystem& memory, TextureRuntime& runtime);
-    ~RasterizerCache() = default;
+    ~RasterizerCache();
 
     /// Get the best surface match (and its match type) for the given flags
     template <MatchFlags find_flags>

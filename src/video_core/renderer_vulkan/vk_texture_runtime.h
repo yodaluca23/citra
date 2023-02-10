@@ -53,6 +53,7 @@ struct HostTextureTag {
     VideoCore::TextureType type = VideoCore::TextureType::Texture2D;
     u32 width = 1;
     u32 height = 1;
+    u32 levels = 1;
 
     auto operator<=>(const HostTextureTag&) const noexcept = default;
 
@@ -101,11 +102,12 @@ public:
     [[nodiscard]] StagingData FindStaging(u32 size, bool upload);
 
     /// Allocates a vulkan image possibly resusing an existing one
-    [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
-                                      VideoCore::TextureType type);
+    [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, u32 levels,
+                                      VideoCore::PixelFormat format, VideoCore::TextureType type);
 
     /// Allocates a vulkan image
-    [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, VideoCore::PixelFormat pixel_format,
+    [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, u32 levels,
+                                      VideoCore::PixelFormat pixel_format,
                                       VideoCore::TextureType type, vk::Format format,
                                       vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect);
 

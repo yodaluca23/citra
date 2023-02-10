@@ -115,16 +115,19 @@ const FormatTuple& TextureRuntime::GetFormatTuple(VideoCore::PixelFormat pixel_f
     return DEFAULT_TUPLE;
 }
 
-OGLTexture TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
-                                    VideoCore::TextureType type) {
-    const u32 layers = type == VideoCore::TextureType::CubeMap ? 6 : 1;
-    const u32 levels = std::log2(std::max(width, height)) + 1;
+OGLTexture TextureRuntime::Allocate(u32 width, u32 height, u32 levels,
+                                    VideoCore::PixelFormat format, VideoCore::TextureType type) {
     const GLenum target =
         type == VideoCore::TextureType::CubeMap ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
 
     // Attempt to recycle an unused texture
     const VideoCore::HostTextureTag key = {
-        .format = format, .width = width, .height = height, .layers = layers};
+        .format = format,
+        .type = type,
+        .width = width,
+        .height = height,
+        .levels = levels,
+    };
 
     if (auto it = texture_recycler.find(key); it != texture_recycler.end()) {
         OGLTexture texture = std::move(it->second);
@@ -311,7 +314,7 @@ void TextureRuntime::BindFramebuffer(GLenum target, GLint level, GLenum textarge
 Surface::Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime)
     : VideoCore::SurfaceBase<Surface>{params}, runtime{runtime}, driver{runtime.GetDriver()} {
     if (pixel_format != VideoCore::PixelFormat::Invalid) {
-        texture = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), params.pixel_format,
+        texture = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), levels, params.pixel_format,
                                    texture_type);
     }
 }
@@ -320,10 +323,11 @@ Surface::~Surface() {
     if (pixel_format != VideoCore::PixelFormat::Invalid) {
         const VideoCore::HostTextureTag tag = {
             .format = pixel_format,
+            .type = texture_type,
             .width = GetScaledWidth(),
             .height = GetScaledHeight(),
-            .layers = texture_type == VideoCore::TextureType::CubeMap ? 6u : 1u};
-
+            .levels = levels,
+        };
         runtime.texture_recycler.emplace(tag, std::move(texture));
     }
 }
