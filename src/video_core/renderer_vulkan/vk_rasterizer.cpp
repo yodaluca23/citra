@@ -488,7 +488,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     const auto [color_surface, depth_surface, surfaces_rect] =
         res_cache.GetFramebufferSurfaces(using_color_fb, using_depth_fb, viewport_rect_unscaled);
 
-    if (!color_surface && shadow_rendering) {
+    if (!color_surface && (shadow_rendering || !depth_surface)) {
         return true;
     }
 
