@@ -258,9 +258,10 @@ public:
         return min_vertex_stride_alignment;
     }
 
-    /// Returns true if the physical device is a Mali gpu
-    bool IsMaliGpu() const {
-        return driver_id == vk::DriverIdKHR::eArmProprietary;
+    /// Returns true if commands should be flushed at the end of each major renderpass
+    bool ShouldFlush() const {
+        return driver_id == vk::DriverIdKHR::eArmProprietary ||
+               driver_id == vk::DriverIdKHR::eQualcommProprietary;
     }
 
 private:

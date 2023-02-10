@@ -194,7 +194,7 @@ void RenderpassCache::ExitRenderpass() {
 
     // The Mali guide recommends flushing at the end of each major renderpass
     // Testing has shown this has a significant effect on rendering performance
-    if (cmd_count > 20 && instance.IsMaliGpu()) {
+    if (cmd_count > 20 && instance.ShouldFlush()) {
         scheduler.Flush();
         cmd_count = 0;
     }
