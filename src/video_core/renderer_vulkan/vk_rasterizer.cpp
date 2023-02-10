@@ -457,14 +457,6 @@ void RasterizerVulkan::DrawTriangles() {
     pipeline_cache.UseTrivialVertexShader();
     pipeline_cache.UseTrivialGeometryShader();
 
-    auto [buffer, offset, _] = stream_buffer.Map(vertex_size, sizeof(HardwareVertex));
-    std::memcpy(buffer, vertex_batch.data(), vertex_size);
-    stream_buffer.Commit(vertex_size);
-
-    scheduler.Record([this, offset = offset](vk::CommandBuffer cmdbuf) {
-        cmdbuf.bindVertexBuffers(0, stream_buffer.Handle(), offset);
-    });
-
     Draw(false, false);
 }
 
@@ -587,7 +579,15 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         succeeded = AccelerateDrawBatchInternal(is_indexed);
     } else {
         pipeline_cache.BindPipeline(pipeline_info, true);
-        scheduler.Record([vertex_count = vertex_batch.size()](vk::CommandBuffer cmdbuf) {
+
+        const u64 vertex_size = vertex_batch.size() * sizeof(HardwareVertex);
+        auto [buffer, offset, _] = stream_buffer.Map(vertex_size, sizeof(HardwareVertex));
+
+        std::memcpy(buffer, vertex_batch.data(), vertex_size);
+        stream_buffer.Commit(vertex_size);
+
+        scheduler.Record([this, offset = offset, vertex_count = vertex_batch.size()](vk::CommandBuffer cmdbuf) {
+            cmdbuf.bindVertexBuffers(0, stream_buffer.Handle(), offset);
             cmdbuf.draw(vertex_count, 1, 0, 0);
         });
     }
