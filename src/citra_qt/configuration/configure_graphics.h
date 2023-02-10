@@ -40,7 +40,6 @@ private:
     ConfigurationShared::CheckState shaders_accurate_mul;
     ConfigurationShared::CheckState use_disk_shader_cache;
     ConfigurationShared::CheckState use_vsync_new;
-    ConfigurationShared::CheckState async_command_recording;
     ConfigurationShared::CheckState async_shader_compilation;
     ConfigurationShared::CheckState spirv_shader_gen;
     std::unique_ptr<Ui::ConfigureGraphics> ui;

@@ -32,7 +32,7 @@ void Scheduler::CommandChunk::ExecuteAll(vk::CommandBuffer cmdbuf) {
 Scheduler::Scheduler(const Instance& instance, RenderpassCache& renderpass_cache)
     : instance{instance}, renderpass_cache{renderpass_cache}, master_semaphore{instance},
       command_pool{instance, master_semaphore}, use_worker_thread{
-                                                    Settings::values.async_command_recording} {
+                                                    !Settings::values.renderer_debug} {
     AllocateWorkerCommandBuffers();
     if (use_worker_thread) {
         AcquireNewChunk();

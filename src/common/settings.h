@@ -452,7 +452,6 @@ struct Values {
     Setting<bool> dump_command_buffers{false, "dump_command_buffers"};
     SwitchableSetting<bool> spirv_shader_gen{true, "spirv_shader_gen"};
     SwitchableSetting<bool> async_shader_compilation{false, "async_shader_compilation"};
-    SwitchableSetting<bool> async_command_recording{true, "async_command_recording"};
     SwitchableSetting<bool> use_hw_renderer{true, "use_hw_renderer"};
     SwitchableSetting<bool> use_hw_shader{true, "use_hw_shader"};
     SwitchableSetting<bool> separable_shader{false, "use_separable_shader"};

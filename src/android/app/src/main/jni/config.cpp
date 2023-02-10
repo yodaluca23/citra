@@ -117,10 +117,6 @@ void Config::ReadValues() {
     Settings::values.graphics_api =
         static_cast<Settings::GraphicsAPI>(sdl2_config->GetInteger("Renderer", "graphics_api", 2));
     Settings::values.renderer_debug = sdl2_config->GetBoolean("Renderer", "renderer_debug", false);
-    Settings::values.async_command_recording =
-        sdl2_config->GetBoolean("Renderer", "async_command_recording", true) &&
-        !Settings::values
-             .renderer_debug; ///< Enabling debug renderer force disables async recording
     Settings::values.async_shader_compilation =
         sdl2_config->GetBoolean("Renderer", "async_shader_compilation", true);
     Settings::values.spirv_shader_gen =

@@ -87,7 +87,6 @@ void ConfigureGraphics::SetConfiguration() {
         static_cast<int>(Settings::values.graphics_api.GetValue()));
     ui->physical_device_combo->setCurrentIndex(
         static_cast<int>(Settings::values.physical_device.GetValue()));
-    ui->toggle_async_recording->setChecked(Settings::values.async_command_recording.GetValue());
     ui->spirv_shader_gen->setChecked(Settings::values.spirv_shader_gen.GetValue());
     ui->toggle_async_shaders->setChecked(Settings::values.async_shader_compilation.GetValue());
 
@@ -113,8 +112,6 @@ void ConfigureGraphics::ApplyConfiguration() {
                                              ui->graphics_api_combo);
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.physical_device,
                                              ui->physical_device_combo);
-    ConfigurationShared::ApplyPerGameSetting(&Settings::values.async_command_recording,
-                                             ui->toggle_async_recording, async_command_recording);
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.async_shader_compilation,
                                              ui->toggle_async_shaders, async_shader_compilation);
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.spirv_shader_gen,

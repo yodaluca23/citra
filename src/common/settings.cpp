@@ -107,7 +107,6 @@ void LogSettings() {
     log_setting("Core_UseCpuJit", values.use_cpu_jit.GetValue());
     log_setting("Core_CPUClockPercentage", values.cpu_clock_percentage.GetValue());
     log_setting("Renderer_GraphicsAPI", GetAPIName(values.graphics_api.GetValue()));
-    log_setting("Renderer_AsyncRecording", values.async_command_recording.GetValue());
     log_setting("Renderer_AsyncShaders", values.async_shader_compilation.GetValue());
     log_setting("Renderer_SpirvShaderGen", values.spirv_shader_gen.GetValue());
     log_setting("Renderer_Debug", values.renderer_debug.GetValue());
