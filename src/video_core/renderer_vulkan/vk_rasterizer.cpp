@@ -581,12 +581,13 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         pipeline_cache.BindPipeline(pipeline_info, true);
 
         const u64 vertex_size = vertex_batch.size() * sizeof(HardwareVertex);
+        const u32 vertex_count = static_cast<u32>(vertex_batch.size());
         auto [buffer, offset, _] = stream_buffer.Map(vertex_size, sizeof(HardwareVertex));
 
         std::memcpy(buffer, vertex_batch.data(), vertex_size);
         stream_buffer.Commit(vertex_size);
 
-        scheduler.Record([this, offset = offset, vertex_count = vertex_batch.size()](vk::CommandBuffer cmdbuf) {
+        scheduler.Record([this, offset = offset, vertex_count](vk::CommandBuffer cmdbuf) {
             cmdbuf.bindVertexBuffers(0, stream_buffer.Handle(), offset);
             cmdbuf.draw(vertex_count, 1, 0, 0);
         });
