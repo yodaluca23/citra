@@ -137,15 +137,22 @@ PipelineCache::GraphicsPipeline::~GraphicsPipeline() {
 
 bool PipelineCache::GraphicsPipeline::Build(bool fail_on_compile_required) {
     if (fail_on_compile_required) {
-        if (!instance.IsPipelineCreationCacheControlSupported()) {
-            return false;
-        }
-
         // Check if all shader modules are ready
         for (auto& shader : stages) {
             if (shader && !shader->IsBuilt()) {
                 return false;
             }
+        }
+
+        if (!instance.IsPipelineCreationCacheControlSupported()) {
+#if ANDROID
+            // Many android devices do not support the above extension.
+            // To avoid having lots of flickering, if all shaders are
+            // ready compile the pipeline anyway.
+            return Build();
+#else
+            return false;
+#endif
         }
     }
 
