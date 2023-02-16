@@ -92,6 +92,12 @@ private:
      * Draws the emulated screens to the emulator window.
      */
     void DrawScreens(const Layout::FramebufferLayout& layout, bool flipped);
+    void ApplySecondLayerOpacity();
+    void DrawBottomScreen(const Layout::FramebufferLayout& layout,
+                          const Common::Rectangle<u32>& bottom_screen,
+                          const bool stereo_single_screen);
+    void DrawTopScreen(const Layout::FramebufferLayout& layout,
+                       const Common::Rectangle<u32>& top_screen, const bool stereo_single_screen);
 
     /**
      * Draws a single texture to the emulator window.

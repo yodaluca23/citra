@@ -113,6 +113,7 @@ __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
 #endif
 
 constexpr int default_mouse_timeout = 2500;
+constexpr int num_options_3d = 5;
 
 /**
  * "Callouts" are one-time instructional messages shown to the user. In the config settings, there
@@ -154,6 +155,28 @@ static void InitializeLogging() {
 #ifdef _WIN32
     Log::AddBackend(std::make_unique<Log::DebuggerBackend>());
 #endif
+}
+
+static QString PrettyProductName() {
+#ifdef _WIN32
+    // After Windows 10 Version 2004, Microsoft decided to switch to a different notation: 20H2
+    // With that notation change they changed the registry key used to denote the current version
+    QSettings windows_registry(
+        QStringLiteral("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"),
+        QSettings::NativeFormat);
+    const QString release_id = windows_registry.value(QStringLiteral("ReleaseId")).toString();
+    if (release_id == QStringLiteral("2009")) {
+        const u32 current_build = windows_registry.value(QStringLiteral("CurrentBuild")).toUInt();
+        const QString display_version =
+            windows_registry.value(QStringLiteral("DisplayVersion")).toString();
+        const u32 ubr = windows_registry.value(QStringLiteral("UBR")).toUInt();
+        const u32 version = current_build >= 22000 ? 11 : 10;
+        return QStringLiteral("Windows %1 Version %2 (Build %3.%4)")
+            .arg(QString::number(version), display_version, QString::number(current_build),
+                 QString::number(ubr));
+    }
+#endif
+    return QSysInfo::prettyProductName();
 }
 
 GMainWindow::GMainWindow()
@@ -198,6 +221,7 @@ GMainWindow::GMainWindow()
 
     ConnectMenuEvents();
     ConnectWidgetEvents();
+    Connect3DStateEvents();
 
     LOG_INFO(Frontend, "Citra Version: {} | {}-{}", Common::g_build_fullname, Common::g_scm_branch,
              Common::g_scm_desc);
@@ -217,7 +241,7 @@ GMainWindow::GMainWindow()
     }
     LOG_INFO(Frontend, "Host CPU: {}", cpu_string);
 #endif
-    LOG_INFO(Frontend, "Host OS: {}", QSysInfo::prettyProductName().toStdString());
+    LOG_INFO(Frontend, "Host OS: {}", PrettyProductName().toStdString());
     const auto& mem_info = Common::GetMemInfo();
     using namespace Common::Literals;
     LOG_INFO(Frontend, "Host RAM: {:.2f} GiB", mem_info.total_physical_memory / f64{1_GiB});
@@ -337,6 +361,20 @@ void GMainWindow::InitializeWidgets() {
     });
 
     statusBar()->insertPermanentWidget(0, graphics_api_button);
+
+    option_3d_button = new QPushButton();
+    option_3d_button->setObjectName(QStringLiteral("3DOptionStatusBarButton"));
+    option_3d_button->setFocusPolicy(Qt::NoFocus);
+    option_3d_button->setToolTip(tr("Indicates the current 3D setting. Click to toggle."));
+
+    factor_3d_slider = new QSlider(Qt::Orientation::Horizontal, this);
+    factor_3d_slider->setStyleSheet(QStringLiteral("QSlider { padding: 4px; }"));
+    factor_3d_slider->setToolTip(tr("Current 3D factor while 3D is enabled."));
+    factor_3d_slider->setRange(0, 100);
+
+    Update3DState();
+    statusBar()->insertPermanentWidget(1, option_3d_button);
+    statusBar()->insertPermanentWidget(2, factor_3d_slider);
 
     statusBar()->addPermanentWidget(multiplayer_state->GetStatusText());
     statusBar()->addPermanentWidget(multiplayer_state->GetStatusIcon());
@@ -588,6 +626,35 @@ void GMainWindow::InitializeHotkeys() {
     });
     connect_shortcut(QStringLiteral("Mute Audio"),
                      [] { Settings::values.audio_muted = !Settings::values.audio_muted; });
+
+    connect_shortcut(QStringLiteral("Toggle 3D"), &GMainWindow::Toggle3D);
+
+    // We use "static" here in order to avoid capturing by lambda due to a MSVC bug, which makes the
+    // variable hold a garbage value after this function exits
+    static constexpr u16 FACTOR_3D_STEP = 5;
+    connect_shortcut(QStringLiteral("Decrease 3D Factor"), [this] {
+        const auto factor_3d = Settings::values.factor_3d.GetValue();
+        if (factor_3d > 0) {
+            if (factor_3d % FACTOR_3D_STEP != 0) {
+                Settings::values.factor_3d = factor_3d - (factor_3d % FACTOR_3D_STEP);
+            } else {
+                Settings::values.factor_3d = factor_3d - FACTOR_3D_STEP;
+            }
+            UpdateStatusBar();
+        }
+    });
+    connect_shortcut(QStringLiteral("Increase 3D Factor"), [this] {
+        const auto factor_3d = Settings::values.factor_3d.GetValue();
+        if (factor_3d < 100) {
+            if (factor_3d % FACTOR_3D_STEP != 0) {
+                Settings::values.factor_3d =
+                    factor_3d + FACTOR_3D_STEP - (factor_3d % FACTOR_3D_STEP);
+            } else {
+                Settings::values.factor_3d = factor_3d + FACTOR_3D_STEP;
+            }
+            UpdateStatusBar();
+        }
+    });
 }
 
 void GMainWindow::ShowUpdaterWidgets() {
@@ -816,6 +883,12 @@ void GMainWindow::UpdateMenuState() {
     } else {
         ui->action_Pause->setText(tr("&Pause"));
     }
+}
+
+void GMainWindow::Connect3DStateEvents() {
+    connect(option_3d_button, &QPushButton::clicked, this, &GMainWindow::Toggle3D);
+    connect(factor_3d_slider, qOverload<int>(&QSlider::valueChanged), this,
+            [](int value) { Settings::values.factor_3d = value; });
 }
 
 void GMainWindow::OnDisplayTitleBars(bool show) {
@@ -1864,6 +1937,7 @@ void GMainWindow::OnLoadState() {
 }
 
 void GMainWindow::OnConfigure() {
+    game_list->SetDirectoryWatcherEnabled(false);
     Settings::SetConfiguringGlobal(true);
     ConfigureDialog configureDialog(this, hotkey_registry,
                                     !multiplayer_state->IsHostingPublicRoom());
@@ -1875,6 +1949,7 @@ void GMainWindow::OnConfigure() {
     const auto old_touch_from_button_maps = Settings::values.touch_from_button_maps;
     const bool old_discord_presence = UISettings::values.enable_discord_presence.GetValue();
     auto result = configureDialog.exec();
+    game_list->SetDirectoryWatcherEnabled(true);
     if (result == QDialog::Accepted) {
         configureDialog.ApplyConfiguration();
         InitializeHotkeys();
@@ -1896,6 +1971,7 @@ void GMainWindow::OnConfigure() {
         }
         UpdateSecondaryWindowVisibility();
         UpdateAPIIndicator(false);
+        Update3DState();
     } else {
         Settings::values.input_profiles = old_input_profiles;
         Settings::values.touch_from_button_maps = old_touch_from_button_maps;
@@ -2156,22 +2232,18 @@ void GMainWindow::UpdateStatusBar() {
     const auto play_mode = Core::Movie::GetInstance().GetPlayMode();
     if (play_mode == Core::Movie::PlayMode::Recording) {
         message_label->setText(tr("Recording %1").arg(current));
-        message_label->setVisible(true);
         message_label_used_for_movie = true;
         ui->action_Save_Movie->setEnabled(true);
     } else if (play_mode == Core::Movie::PlayMode::Playing) {
         message_label->setText(tr("Playing %1 / %2").arg(current, total));
-        message_label->setVisible(true);
         message_label_used_for_movie = true;
         ui->action_Save_Movie->setEnabled(false);
     } else if (play_mode == Core::Movie::PlayMode::MovieFinished) {
         message_label->setText(tr("Movie Finished"));
-        message_label->setVisible(true);
         message_label_used_for_movie = true;
         ui->action_Save_Movie->setEnabled(false);
     } else if (message_label_used_for_movie) { // Clear the label if movie was just closed
         message_label->setText(QString{});
-        message_label->setVisible(false);
         message_label_used_for_movie = false;
         ui->action_Save_Movie->setEnabled(false);
     }
@@ -2191,6 +2263,18 @@ void GMainWindow::UpdateStatusBar() {
     emu_speed_label->setVisible(true);
     game_fps_label->setVisible(true);
     emu_frametime_label->setVisible(true);
+}
+
+void GMainWindow::Update3DState() {
+    static const std::array options_3d = {tr("Off"), tr("Side by Side"), tr("Anaglyph"),
+                                          tr("Interlaced"), tr("Reverse Interlaced")};
+
+    option_3d_button->setText(
+        tr("3D: %1").arg(options_3d[static_cast<int>(Settings::values.render_3d.GetValue())]));
+
+    factor_3d_slider->setValue(Settings::values.factor_3d.GetValue());
+    factor_3d_slider->setVisible(Settings::values.render_3d.GetValue() !=
+                                 Settings::StereoRenderOption::Off);
 }
 
 void GMainWindow::HideMouseCursor() {
@@ -2315,7 +2399,6 @@ void GMainWindow::OnCoreError(Core::System::ResultStatus result, std::string det
     if (emu_thread) {
         emu_thread->SetRunning(true);
         message_label->setText(status_message);
-        message_label->setVisible(true);
         message_label_used_for_movie = false;
     }
 }
@@ -2323,6 +2406,12 @@ void GMainWindow::OnCoreError(Core::System::ResultStatus result, std::string det
 void GMainWindow::OnMenuAboutCitra() {
     AboutDialog about{this};
     about.exec();
+}
+
+void GMainWindow::Toggle3D() {
+    Settings::values.render_3d = static_cast<Settings::StereoRenderOption>(
+        (static_cast<int>(Settings::values.render_3d.GetValue()) + 1) % num_options_3d);
+    Update3DState();
 }
 
 bool GMainWindow::ConfirmClose() {
@@ -2441,6 +2530,8 @@ void GMainWindow::UpdateUITheme() {
             qApp->setStyleSheet(ts.readAll());
             setStyleSheet(ts.readAll());
         } else {
+            LOG_ERROR(Frontend,
+                      "Unable to open default stylesheet, falling back to empty stylesheet");
             qApp->setStyleSheet({});
             setStyleSheet({});
         }
@@ -2610,6 +2701,55 @@ void GMainWindow::SetDiscordEnabled([[maybe_unused]] bool state) {
 #undef main
 #endif
 
+static void SetHighDPIAttributes() {
+#ifdef _WIN32
+    // For Windows, we want to avoid scaling artifacts on fractional scaling ratios.
+    // This is done by setting the optimal scaling policy for the primary screen.
+
+    // Create a temporary QApplication.
+    int temp_argc = 0;
+    char** temp_argv = nullptr;
+    QApplication temp{temp_argc, temp_argv};
+
+    // Get the current screen geometry.
+    const QScreen* primary_screen = QGuiApplication::primaryScreen();
+    if (primary_screen == nullptr) {
+        return;
+    }
+
+    const QRect screen_rect = primary_screen->geometry();
+    const int real_width = screen_rect.width();
+    const int real_height = screen_rect.height();
+    const float real_ratio = primary_screen->logicalDotsPerInch() / 96.0f;
+
+    // Recommended minimum width and height for proper window fit.
+    // Any screen with a lower resolution than this will still have a scale of 1.
+    constexpr float minimum_width = 1350.0f;
+    constexpr float minimum_height = 900.0f;
+
+    const float width_ratio = std::max(1.0f, real_width / minimum_width);
+    const float height_ratio = std::max(1.0f, real_height / minimum_height);
+
+    // Get the lower of the 2 ratios and truncate, this is the maximum integer scale.
+    const float max_ratio = std::trunc(std::min(width_ratio, height_ratio));
+
+    if (max_ratio > real_ratio) {
+        QApplication::setHighDpiScaleFactorRoundingPolicy(
+            Qt::HighDpiScaleFactorRoundingPolicy::Round);
+    } else {
+        QApplication::setHighDpiScaleFactorRoundingPolicy(
+            Qt::HighDpiScaleFactorRoundingPolicy::Floor);
+    }
+#else
+    // Other OSes should be better than Windows at fractional scaling.
+    QApplication::setHighDpiScaleFactorRoundingPolicy(
+        Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
+#endif
+
+    QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+    QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+}
+
 int main(int argc, char* argv[]) {
     Common::DetachedTasks detached_tasks;
     MicroProfileOnThreadCreate("Frontend");
@@ -2618,6 +2758,8 @@ int main(int argc, char* argv[]) {
     // Init settings params
     QCoreApplication::setOrganizationName(QStringLiteral("Citra team"));
     QCoreApplication::setApplicationName(QStringLiteral("Citra"));
+
+    SetHighDPIAttributes();
 
 #ifdef __APPLE__
     std::string bin_path = FileUtil::GetBundleDirectory() + DIR_SEP + "..";
