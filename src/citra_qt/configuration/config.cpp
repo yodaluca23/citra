@@ -487,6 +487,7 @@ void Config::ReadLayoutValues() {
     ReadGlobalSetting(Settings::values.layout_option);
     ReadGlobalSetting(Settings::values.swap_screen);
     ReadGlobalSetting(Settings::values.upright_screen);
+    ReadGlobalSetting(Settings::values.large_screen_proportion);
 
     if (global) {
         ReadBasicSetting(Settings::values.mono_render_option);
@@ -1004,6 +1005,7 @@ void Config::SaveLayoutValues() {
     WriteGlobalSetting(Settings::values.layout_option);
     WriteGlobalSetting(Settings::values.swap_screen);
     WriteGlobalSetting(Settings::values.upright_screen);
+    WriteGlobalSetting(Settings::values.large_screen_proportion);
 
     if (global) {
         WriteBasicSetting(Settings::values.mono_render_option);
