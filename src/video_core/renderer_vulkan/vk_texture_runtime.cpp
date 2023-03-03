@@ -263,7 +263,7 @@ Allocation TextureRuntime::Allocate(u32 width, u32 height, u32 levels, bool is_m
     vk::Device device = instance.GetDevice();
     vk::UniqueImageView image_view = device.createImageViewUnique(view_info);
 
-    renderpass_cache.ExitRenderpass();
+    renderpass_cache.EndRendering();
     scheduler.Record([image, aspect](vk::CommandBuffer cmdbuf) {
         const vk::ImageMemoryBarrier init_barrier = {
             .srcAccessMask = vk::AccessFlagBits::eNone,
@@ -305,7 +305,7 @@ void TextureRuntime::Recycle(const HostTextureTag tag, Allocation&& alloc) {
 }
 
 bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClear& clear) {
-    renderpass_cache.ExitRenderpass();
+    renderpass_cache.EndRendering();
 
     const RecordParams params = {
         .aspect = surface.alloc.aspect,
@@ -445,9 +445,9 @@ void TextureRuntime::ClearTextureWithRenderpass(Surface& surface,
         },
     };
 
-    renderpass_cache.EnterRenderpass(color_surface, depth_surface, render_area, true,
+    renderpass_cache.BeginRendering(color_surface, depth_surface, render_area, true,
                                      MakeClearValue(clear.value));
-    renderpass_cache.ExitRenderpass();
+    renderpass_cache.EndRendering();
 
     scheduler.Record([params, access_flag, pipeline_flags](vk::CommandBuffer cmdbuf) {
         const vk::ImageMemoryBarrier post_barrier = {
@@ -474,7 +474,7 @@ void TextureRuntime::ClearTextureWithRenderpass(Surface& surface,
 
 bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
                                   const VideoCore::TextureCopy& copy) {
-    renderpass_cache.ExitRenderpass();
+    renderpass_cache.EndRendering();
 
     const RecordParams params = {
         .aspect = source.alloc.aspect,
@@ -603,7 +603,7 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
         return blit_helper.BlitDepthStencil(source, dest, blit);
     }
 
-    renderpass_cache.ExitRenderpass();
+    renderpass_cache.EndRendering();
 
     const RecordParams params = {
         .aspect = source.alloc.aspect,
@@ -735,7 +735,7 @@ void TextureRuntime::GenerateMipmaps(Surface& surface) {
         return;
     }
 
-    renderpass_cache.ExitRenderpass();
+    renderpass_cache.EndRendering();
 
     // Always use the allocation width on custom textures
     u32 current_width = surface.alloc.width;
@@ -823,7 +823,7 @@ Surface::~Surface() {
 }
 
 void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging) {
-    runtime->renderpass_cache.ExitRenderpass();
+    runtime->renderpass_cache.EndRendering();
 
     const bool is_scaled = res_scale != 1;
     if (is_scaled) {
@@ -919,7 +919,7 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
 }
 
 void Surface::Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging) {
-    runtime->renderpass_cache.ExitRenderpass();
+    runtime->renderpass_cache.EndRendering();
 
     // For depth stencil downloads always use the compute shader fallback
     // to avoid having the interleave the data later. These should(?) be

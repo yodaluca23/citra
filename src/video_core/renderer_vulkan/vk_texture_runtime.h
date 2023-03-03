@@ -263,6 +263,10 @@ public:
         return static_cast<bool>(image_views[Index(type)]);
     }
 
+    bool HasStencil() const noexcept {
+        return Format(VideoCore::SurfaceType::DepthStencil) == VideoCore::PixelFormat::D24S8;
+    }
+
     u32 Width() const noexcept {
         return width;
     }

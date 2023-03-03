@@ -6,6 +6,7 @@
 
 #include <compare>
 #include <cstring>
+#include <mutex>
 #include <variant>
 #include "common/hash.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
@@ -53,13 +54,13 @@ public:
     void ClearFramebuffers();
 
     /// Begins a new renderpass only when no other renderpass is currently active
-    void EnterRenderpass(const Framebuffer& framebuffer, bool do_clear = false,
+    void BeginRendering(const Framebuffer& framebuffer, bool do_clear = false,
                          vk::ClearValue clear = {});
-    void EnterRenderpass(Surface* const color, Surface* const depth_stencil, vk::Rect2D render_area,
+    void BeginRendering(Surface* const color, Surface* const depth_stencil, vk::Rect2D render_area,
                          bool do_clear = false, vk::ClearValue clear = {});
 
     /// Exits from any currently active renderpass instance
-    void ExitRenderpass();
+    void EndRendering();
 
     /// Creates the renderpass used when rendering to the swapchain
     void CreatePresentRenderpass(vk::Format format);
@@ -75,7 +76,10 @@ public:
 
 private:
     /// Begins a new rendering scope using dynamic rendering
-    void BeginRendering(const Framebuffer& framebuffer, bool do_clear, vk::ClearValue clear);
+    void DynamicRendering(const Framebuffer& framebuffer);
+
+    /// Begins a new rendering scope using renderpasses
+    void EnterRenderpass(const Framebuffer& framebuffer);
 
     /// Creates a renderpass configured appropriately and stores it in cached_renderpasses
     vk::RenderPass CreateRenderPass(vk::Format color, vk::Format depth,
@@ -123,6 +127,7 @@ private:
     bool rendering = false;
     bool dynamic_rendering = false;
     u32 cmd_count{};
+    std::mutex cache_mutex;
 };
 
 } // namespace Vulkan

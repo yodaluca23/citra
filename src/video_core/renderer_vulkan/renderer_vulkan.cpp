@@ -236,7 +236,7 @@ void RendererVulkan::BeginRendering(Frame* frame) {
     instance.GetDevice().updateDescriptorSetWithTemplate(set, present_update_template,
                                                          present_textures[0]);
 
-    renderpass_cache.ExitRenderpass();
+    renderpass_cache.EndRendering();
     scheduler.Record([this, framebuffer = frame->framebuffer, width = frame->width,
                       height = frame->height, set,
                       pipeline_index = current_pipeline](vk::CommandBuffer cmdbuf) {
@@ -569,7 +569,7 @@ void RendererVulkan::LoadColorToActiveVkTexture(u8 color_r, u8 color_g, u8 color
             },
     };
 
-    renderpass_cache.ExitRenderpass();
+    renderpass_cache.EndRendering();
     scheduler.Record([image = texture.image, clear_color](vk::CommandBuffer cmdbuf) {
         const vk::ImageSubresourceRange range = {
             .aspectMask = vk::ImageAspectFlagBits::eColor,

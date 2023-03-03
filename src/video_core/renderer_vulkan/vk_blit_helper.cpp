@@ -331,7 +331,7 @@ bool BlitHelper::BlitDepthStencil(Surface& source, Surface& dest,
     vk::DescriptorSet set = desc_manager.AllocateSet(two_textures_descriptor_layout);
     device.updateDescriptorSetWithTemplate(set, two_textures_update_template, textures[0]);
 
-    renderpass_cache.EnterRenderpass(nullptr, &dest, dst_render_area);
+    renderpass_cache.BeginRendering(nullptr, &dest, dst_render_area);
     scheduler.Record([blit, set, this](vk::CommandBuffer cmdbuf) {
         const vk::PipelineLayout layout = two_textures_pipeline_layout;
 
@@ -364,7 +364,7 @@ void BlitHelper::BlitD24S8ToR32(Surface& source, Surface& dest,
     vk::DescriptorSet set = desc_manager.AllocateSet(compute_descriptor_layout);
     device.updateDescriptorSetWithTemplate(set, compute_update_template, textures[0]);
 
-    renderpass_cache.ExitRenderpass();
+    renderpass_cache.EndRendering();
     scheduler.Record([this, set, blit, src_image = source.Image(),
                       dst_image = dest.Image()](vk::CommandBuffer cmdbuf) {
         const std::array pre_barriers = {

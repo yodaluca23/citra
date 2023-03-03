@@ -496,7 +496,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     UploadUniforms(accelerate);
 
     // Begin the renderpass
-    renderpass_cache.EnterRenderpass(framebuffer);
+    renderpass_cache.BeginRendering(framebuffer);
 
     // Sync the viewport
     // Viewport can have negative offsets or larger dimensions than our framebuffer sub-rect.

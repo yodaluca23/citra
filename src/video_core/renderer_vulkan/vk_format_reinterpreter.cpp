@@ -163,7 +163,7 @@ void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surf
     vk::DescriptorSet set = desc_manager.AllocateSet(descriptor_layout);
     device.updateDescriptorSetWithTemplate(set, update_template, textures[0]);
 
-    runtime.GetRenderpassCache().ExitRenderpass();
+    runtime.GetRenderpassCache().EndRendering();
     scheduler.Record([this, set, src_rect, src_image = source.Image(),
                       dst_image = dest.Image()](vk::CommandBuffer cmdbuf) {
         const std::array pre_barriers = {

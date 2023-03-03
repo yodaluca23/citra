@@ -121,7 +121,7 @@ void Scheduler::SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wa
     const u64 signal_value = master_semaphore.NextTick();
     state = StateFlags::AllDirty;
 
-    renderpass_cache.ExitRenderpass();
+    renderpass_cache.EndRendering();
     Record(
         [signal_semaphore, wait_semaphore, handle, signal_value, this](vk::CommandBuffer cmdbuf) {
             MICROPROFILE_SCOPE(Vulkan_Submit);
