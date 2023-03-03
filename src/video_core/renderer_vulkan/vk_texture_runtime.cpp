@@ -1060,8 +1060,8 @@ vk::AccessFlags Surface::AccessFlags() const noexcept {
 
     return vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eTransferRead |
            vk::AccessFlagBits::eTransferWrite |
-           (is_framebuffer ? attachment_flags : vk::AccessFlagBits::eNone) |
-           (is_storage ? vk::AccessFlagBits::eShaderWrite : vk::AccessFlagBits::eNone);
+           (alloc.is_framebuffer ? attachment_flags : vk::AccessFlagBits::eNone) |
+           (alloc.is_storage ? vk::AccessFlagBits::eShaderWrite : vk::AccessFlagBits::eNone);
 }
 
 vk::PipelineStageFlags Surface::PipelineStageFlags() const noexcept {
@@ -1072,8 +1072,8 @@ vk::PipelineStageFlags Surface::PipelineStageFlags() const noexcept {
                        vk::PipelineStageFlagBits::eLateFragmentTests;
 
     return vk::PipelineStageFlagBits::eTransfer | vk::PipelineStageFlagBits::eFragmentShader |
-           (is_framebuffer ? attachment_flags : vk::PipelineStageFlagBits::eNone) |
-           (is_storage ? vk::PipelineStageFlagBits::eComputeShader
+           (alloc.is_framebuffer ? attachment_flags : vk::PipelineStageFlagBits::eNone) |
+           (alloc.is_storage ? vk::PipelineStageFlagBits::eComputeShader
                        : vk::PipelineStageFlagBits::eNone);
 }
 
@@ -1129,6 +1129,7 @@ vk::ImageView Surface::StorageView() noexcept {
         return storage_view.get();
     }
 
+    alloc.is_storage = true;
     ASSERT_MSG(pixel_format == VideoCore::PixelFormat::RGBA8,
                "Attempted to retrieve storage view from unsupported surface with format {}",
                VideoCore::PixelFormatAsString(pixel_format));
@@ -1306,7 +1307,7 @@ void Framebuffer::PrepareImages(Surface* const color, Surface* const depth_stenc
         height = std::min(height, surface->GetScaledHeight());
         formats[cursor] = surface->pixel_format;
         images[cursor] = surface->Image();
-        image_views[cursor++] = surface->ImageView();
+        image_views[cursor++] = surface->FramebufferView();
     };
 
     // Setup image handles

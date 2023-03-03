@@ -32,6 +32,8 @@ struct Allocation {
     vk::ImageAspectFlags aspect;
     vk::Format format;
     bool is_mutable;
+    bool is_framebuffer{};
+    bool is_storage{};
     u32 width;
     u32 height;
     u32 levels;
@@ -188,6 +190,11 @@ public:
         return alloc.image_view.get();
     }
 
+    vk::ImageView FramebufferView() noexcept {
+        alloc.is_framebuffer = true;
+        return ImageView();
+    }
+
     /// Uploads pixel data in staging to a rectangle region of the surface texture
     void Upload(const VideoCore::BufferTextureCopy& upload, const VideoCore::StagingData& staging);
 
@@ -234,8 +241,6 @@ private:
     const Instance* instance;
     Scheduler* scheduler;
     Allocation alloc{};
-    bool is_framebuffer{};
-    bool is_storage{};
 };
 
 class Framebuffer : public VideoCore::FramebufferBase {
