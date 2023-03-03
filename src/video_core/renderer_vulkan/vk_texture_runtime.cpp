@@ -1346,7 +1346,7 @@ Sampler::Sampler(TextureRuntime& runtime, const VideoCore::SamplerParams& params
         .addressModeU = wrap_u,
         .addressModeV = wrap_v,
         .mipLodBias = 0,
-        .anisotropyEnable = true,
+        .anisotropyEnable = instance.IsAnisotropicFilteringSupported(),
         .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
         .compareEnable = false,
         .compareOp = vk::CompareOp::eAlways,
