@@ -11,6 +11,7 @@ namespace Vulkan {
 
 constexpr u32 MAX_DESCRIPTORS = 7;
 constexpr u32 MAX_DESCRIPTOR_SETS = 3;
+constexpr u32 MAX_BATCH_SIZE = 32;
 
 union DescriptorData {
     vk::DescriptorImageInfo image_info;
@@ -32,8 +33,13 @@ public:
     DescriptorManager(const Instance& instance, Scheduler& scheduler);
     ~DescriptorManager();
 
+    /// Allocates an array of descriptor sets of the provided layout
+    std::vector<vk::DescriptorSet> AllocateSets(vk::DescriptorSetLayout layout, u32 num_sets);
+
     /// Allocates a descriptor set of the provided layout
-    vk::DescriptorSet AllocateSet(vk::DescriptorSetLayout layout);
+    vk::DescriptorSet AllocateSet(vk::DescriptorSetLayout layout) {
+        return AllocateSets(layout, 1)[0];
+    }
 
     /// Binds a resource to the provided binding
     void SetBinding(u32 set, u32 binding, DescriptorData data);
@@ -60,6 +66,7 @@ private:
     std::array<vk::DescriptorUpdateTemplate, MAX_DESCRIPTOR_SETS> update_templates;
     std::array<DescriptorSetData, MAX_DESCRIPTOR_SETS> update_data{};
     std::array<vk::DescriptorSet, MAX_DESCRIPTOR_SETS> descriptor_sets{};
+    std::array<std::vector<vk::DescriptorSet>, MAX_DESCRIPTOR_SETS> set_cache;
     std::bitset<MAX_DESCRIPTOR_SETS> descriptor_set_dirty{};
 };
 

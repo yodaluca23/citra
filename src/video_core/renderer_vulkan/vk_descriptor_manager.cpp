@@ -115,18 +115,21 @@ void DescriptorManager::BindDescriptorSets() {
     }
 
     const vk::Device device = instance.GetDevice();
-    std::array<vk::DescriptorSet, MAX_DESCRIPTOR_SETS> bound_sets;
     for (u32 i = 0; i < MAX_DESCRIPTOR_SETS; i++) {
         if (descriptor_set_dirty[i] || is_dirty) {
-            vk::DescriptorSet set = AllocateSet(descriptor_set_layouts[i]);
+            std::vector<vk::DescriptorSet>& cache = set_cache[i];
+            if (cache.empty()) {
+                cache = AllocateSets(descriptor_set_layouts[i], MAX_BATCH_SIZE);
+            }
+
+            vk::DescriptorSet set = cache.back();
+            cache.pop_back();
             device.updateDescriptorSetWithTemplate(set, update_templates[i], update_data[i][0]);
             descriptor_sets[i] = set;
         }
-
-        bound_sets[i] = descriptor_sets[i];
     }
 
-    scheduler.Record([this, bound_sets](vk::CommandBuffer cmdbuf) {
+    scheduler.Record([this, bound_sets = descriptor_sets](vk::CommandBuffer cmdbuf) {
         cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout, 0, bound_sets,
                                   {});
     });
@@ -185,22 +188,29 @@ void DescriptorManager::BuildLayouts() {
     pipeline_layout = device.createPipelineLayout(layout_info);
 }
 
-vk::DescriptorSet DescriptorManager::AllocateSet(vk::DescriptorSetLayout layout) {
-    const vk::Device device = instance.GetDevice();
-    const vk::DescriptorSetAllocateInfo alloc_info = {
+std::vector<vk::DescriptorSet> DescriptorManager::AllocateSets(vk::DescriptorSetLayout layout, u32 num_sets) {
+    static std::array<vk::DescriptorSetLayout, MAX_BATCH_SIZE> layouts;
+    layouts.fill(layout);
+
+    vk::DescriptorSetAllocateInfo alloc_info = {
         .descriptorPool = current_pool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &layout,
+        .descriptorSetCount = num_sets,
+        .pSetLayouts = layouts.data(),
     };
 
     try {
-        return device.allocateDescriptorSets(alloc_info)[0];
+        return instance.GetDevice().allocateDescriptorSets(alloc_info);
     } catch (vk::OutOfPoolMemoryError) {
         pool_provider.RefreshTick();
         current_pool = pool_provider.Commit();
+        for (auto& cache : set_cache) {
+            cache.clear();
+        }
+        descriptor_set_dirty.set();
     }
 
-    return AllocateSet(layout);
+    alloc_info.descriptorPool = current_pool;
+    return instance.GetDevice().allocateDescriptorSets(alloc_info);
 }
 
 } // namespace Vulkan
