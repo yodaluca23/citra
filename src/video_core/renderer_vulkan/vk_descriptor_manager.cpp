@@ -188,7 +188,8 @@ void DescriptorManager::BuildLayouts() {
     pipeline_layout = device.createPipelineLayout(layout_info);
 }
 
-std::vector<vk::DescriptorSet> DescriptorManager::AllocateSets(vk::DescriptorSetLayout layout, u32 num_sets) {
+std::vector<vk::DescriptorSet> DescriptorManager::AllocateSets(vk::DescriptorSetLayout layout,
+                                                               u32 num_sets) {
     static std::array<vk::DescriptorSetLayout, MAX_BATCH_SIZE> layouts;
     layouts.fill(layout);
 

@@ -446,7 +446,7 @@ void TextureRuntime::ClearTextureWithRenderpass(Surface& surface,
     };
 
     renderpass_cache.BeginRendering(color_surface, depth_surface, render_area, true,
-                                     MakeClearValue(clear.value));
+                                    MakeClearValue(clear.value));
     renderpass_cache.EndRendering();
 
     scheduler.Record([params, access_flag, pipeline_flags](vk::CommandBuffer cmdbuf) {
@@ -1074,7 +1074,7 @@ vk::PipelineStageFlags Surface::PipelineStageFlags() const noexcept {
     return vk::PipelineStageFlagBits::eTransfer | vk::PipelineStageFlagBits::eFragmentShader |
            (alloc.is_framebuffer ? attachment_flags : vk::PipelineStageFlagBits::eNone) |
            (alloc.is_storage ? vk::PipelineStageFlagBits::eComputeShader
-                       : vk::PipelineStageFlagBits::eNone);
+                             : vk::PipelineStageFlagBits::eNone);
 }
 
 vk::ImageView Surface::DepthView() noexcept {

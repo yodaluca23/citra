@@ -2,6 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <atomic>
 #include <condition_variable>
 #include <mutex>
 #include <queue>
@@ -21,6 +22,7 @@ class RenderpassCache;
 struct Frame {
     u32 width{};
     u32 height{};
+    u32 index{};
     VmaAllocation allocation{};
     vk::Framebuffer framebuffer{};
     vk::Image image{};
@@ -29,6 +31,7 @@ struct Frame {
     vk::Fence present_done{};
     std::mutex fence_mutex{};
     vk::CommandBuffer cmdbuf{};
+    std::atomic_bool is_submitted{false};
 };
 
 class PresentMailbox final {

@@ -55,9 +55,9 @@ public:
 
     /// Begins a new renderpass only when no other renderpass is currently active
     void BeginRendering(const Framebuffer& framebuffer, bool do_clear = false,
-                         vk::ClearValue clear = {});
+                        vk::ClearValue clear = {});
     void BeginRendering(Surface* const color, Surface* const depth_stencil, vk::Rect2D render_area,
-                         bool do_clear = false, vk::ClearValue clear = {});
+                        bool do_clear = false, vk::ClearValue clear = {});
 
     /// Exits from any currently active renderpass instance
     void EndRendering();

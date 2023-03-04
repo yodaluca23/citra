@@ -41,6 +41,7 @@ PresentMailbox::PresentMailbox(const Instance& instance_, Swapchain& swapchain_,
 
     for (u32 i = 0; i < SWAP_CHAIN_SIZE; i++) {
         Frame& frame = swap_chain[i];
+        frame.index = i;
         frame.cmdbuf = command_buffers[i];
         frame.render_ready = device.createSemaphore({});
         frame.present_done = device.createFence({.flags = vk::FenceCreateFlagBits::eSignaled});
@@ -162,6 +163,7 @@ Frame* PresentMailbox::GetRenderFrame() {
     }
 
     device.resetFences(frame->present_done);
+    frame->is_submitted = false;
     return frame;
 }
 
@@ -325,6 +327,9 @@ void PresentMailbox::CopyToSwapchain(Frame* frame) {
         .signalSemaphoreCount = 1,
         .pSignalSemaphores = &present_ready,
     };
+
+    // Ensure we won't wait on a semaphore that has no way of being signaled
+    frame->is_submitted.wait(false);
 
     try {
         std::scoped_lock lock{scheduler.QueueMutex(), frame->fence_mutex};

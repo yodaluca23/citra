@@ -44,12 +44,12 @@ void RenderpassCache::ClearFramebuffers() {
 }
 
 void RenderpassCache::BeginRendering(Surface* const color, Surface* const depth_stencil,
-                                      vk::Rect2D render_area, bool do_clear, vk::ClearValue clear) {
+                                     vk::Rect2D render_area, bool do_clear, vk::ClearValue clear) {
     return BeginRendering(Framebuffer{color, depth_stencil, render_area}, do_clear, clear);
 }
 
 void RenderpassCache::BeginRendering(const Framebuffer& framebuffer, bool do_clear,
-                                      vk::ClearValue clear) {
+                                     vk::ClearValue clear) {
     RenderingInfo new_info = {
         .color{
             .aspect = vk::ImageAspectFlagBits::eColor,

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <cstddef>
 #include <memory>
@@ -38,14 +39,11 @@ public:
     ~Scheduler();
 
     /// Sends the current execution context to the GPU.
-    void Flush(vk::Semaphore signal = nullptr, vk::Semaphore wait = nullptr);
+    void Flush(vk::Semaphore signal = nullptr, vk::Semaphore wait = nullptr,
+               std::atomic_bool* submit_done = nullptr);
 
     /// Sends the current execution context to the GPU and waits for it to complete.
     void Finish(vk::Semaphore signal = nullptr, vk::Semaphore wait = nullptr);
-
-    /// Waits for the worker thread to finish executing everything. After this function returns it's
-    /// safe to touch worker resources.
-    void WaitWorker();
 
     /// Sends currently recorded work to the worker thread.
     void DispatchWork();
@@ -198,8 +196,6 @@ private:
     void WorkerThread(std::stop_token stop_token);
 
     void AllocateWorkerCommandBuffers();
-
-    void SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wait_semaphore);
 
     void AcquireNewChunk();
 
