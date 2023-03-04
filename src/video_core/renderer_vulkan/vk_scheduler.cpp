@@ -74,9 +74,6 @@ void Scheduler::WorkerThread(std::stop_token stop_token) {
         std::unique_ptr<CommandChunk> work;
         {
             std::unique_lock lock{work_mutex};
-            if (work_queue.empty()) {
-                wait_cv.notify_all();
-            }
             Common::CondvarWait(work_cv, lock, stop_token, [&] { return !work_queue.empty(); });
             if (stop_token.stop_requested()) {
                 continue;

@@ -7,7 +7,6 @@
 #include <mutex>
 #include <queue>
 #include "common/polyfill_thread.h"
-#include "common/threadsafe_queue.h"
 #include "video_core/renderer_vulkan/vk_common.h"
 
 VK_DEFINE_HANDLE(VmaAllocation)
@@ -52,6 +51,28 @@ private:
     void CopyToSwapchain(Frame* frame);
     void RecreateSwapchain();
 
+    struct FrameQueue {
+        void Push(Frame* frame) {
+            std::scoped_lock lock{mutex};
+            queue.push(frame);
+            cv.notify_one();
+        }
+
+        Frame* PopWait(std::stop_token token = {}) {
+            std::unique_lock lock{mutex};
+            if (queue.empty()) {
+                Common::CondvarWait(cv, lock, token, [this] { return !queue.empty(); });
+            }
+            Frame* frame = queue.front();
+            queue.pop();
+            return frame;
+        }
+
+        std::queue<Frame*> queue;
+        std::condition_variable_any cv;
+        std::mutex mutex;
+    };
+
 private:
     const Instance& instance;
     Swapchain& swapchain;
@@ -60,8 +81,8 @@ private:
     vk::CommandPool command_pool;
     vk::Queue graphics_queue;
     std::array<Frame, SWAP_CHAIN_SIZE> swap_chain{};
-    Common::SPSCQueue<Frame*> free_queue{};
-    Common::SPSCQueue<Frame*, true> present_queue{};
+    FrameQueue free_queue;
+    FrameQueue present_queue;
     std::jthread present_thread;
     std::mutex swapchain_mutex;
     std::condition_variable swapchain_cv;

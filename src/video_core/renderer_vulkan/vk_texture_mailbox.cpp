@@ -45,7 +45,7 @@ PresentMailbox::PresentMailbox(const Instance& instance_, Swapchain& swapchain_,
         frame.cmdbuf = command_buffers[i];
         frame.render_ready = device.createSemaphore({});
         frame.present_done = device.createFence({.flags = vk::FenceCreateFlagBits::eSignaled});
-        free_queue.Push(&frame);
+        free_queue.queue.push(&frame);
     }
 
     present_thread = std::jthread([this](std::stop_token token) { PresentThread(token); });

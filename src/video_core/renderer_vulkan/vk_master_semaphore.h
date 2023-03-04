@@ -15,7 +15,7 @@ namespace Vulkan {
 
 class Instance;
 
-constexpr u64 WAIT_TIMEOUT = std::numeric_limits<u64>::max();
+constexpr u64 WAIT_TIMEOUT = 1000000000;
 
 class MasterSemaphore {
 public:
