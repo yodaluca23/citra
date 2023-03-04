@@ -213,7 +213,6 @@ private:
     std::mutex work_mutex;
     std::mutex queue_mutex;
     std::condition_variable_any work_cv;
-    std::condition_variable wait_cv;
     std::jthread worker_thread;
     bool use_worker_thread;
 };
