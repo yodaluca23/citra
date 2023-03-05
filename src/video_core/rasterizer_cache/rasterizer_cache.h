@@ -42,9 +42,17 @@ RasterizerCache<T>::RasterizerCache(Memory::MemorySystem& memory_,
                                            .width = 1,
                                            .height = 1,
                                            .stride = 1,
-                                           .texture_type = VideoCore::TextureType::Texture2D,
-                                           .pixel_format = VideoCore::PixelFormat::RGBA8,
-                                           .type = VideoCore::SurfaceType::Color,
+                                           .texture_type = TextureType::Texture2D,
+                                           .pixel_format = PixelFormat::RGBA8,
+                                           .type = SurfaceType::Color,
+                                       }));
+    void(slot_surfaces.insert(runtime, SurfaceParams{
+                                           .width = 1,
+                                           .height = 1,
+                                           .stride = 1,
+                                           .texture_type = TextureType::CubeMap,
+                                           .pixel_format = PixelFormat::RGBA8,
+                                           .type = SurfaceType::Color,
                                        }));
     void(slot_samplers.insert(runtime, SamplerParams{
                                            .mag_filter = TextureConfig::TextureFilter::Linear,
@@ -614,6 +622,10 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& inf
 
 template <class T>
 auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> Surface& {
+    if (config.px == 0) [[unlikely]] {
+        return slot_surfaces[NULL_SURFACE_CUBE_ID];
+    }
+
     auto [it, new_surface] = texture_cube_cache.try_emplace(config);
     if (new_surface) {
         const SurfaceParams cube_params = {

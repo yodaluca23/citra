@@ -22,6 +22,8 @@ using SamplerId = SlotId;
 
 /// Fake surface ID for null surfaces
 constexpr SurfaceId NULL_SURFACE_ID{0};
+/// Fake surface Id for null surface cubes
+constexpr SurfaceId NULL_SURFACE_CUBE_ID{1};
 /// Fake sampler ID for null samplers
 constexpr SamplerId NULL_SAMPLER_ID{0};
 
