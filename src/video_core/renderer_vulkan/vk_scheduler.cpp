@@ -42,65 +42,7 @@ Scheduler::Scheduler(const Instance& instance, RenderpassCache& renderpass_cache
 
 Scheduler::~Scheduler() = default;
 
-void Scheduler::Finish(vk::Semaphore signal, vk::Semaphore wait) {
-    const u64 presubmit_tick = CurrentTick();
-    std::atomic_bool submit_done{false};
-
-    Flush(signal, wait, &submit_done);
-    if (use_worker_thread) {
-        MICROPROFILE_SCOPE(Vulkan_WaitForWorker);
-        submit_done.wait(false);
-    }
-    Wait(presubmit_tick);
-}
-
-void Scheduler::DispatchWork() {
-    if (!use_worker_thread || chunk->Empty()) {
-        return;
-    }
-
-    {
-        std::scoped_lock lock{work_mutex};
-        work_queue.push(std::move(chunk));
-    }
-
-    work_cv.notify_one();
-    AcquireNewChunk();
-}
-
-void Scheduler::WorkerThread(std::stop_token stop_token) {
-    Common::SetCurrentThreadName("VulkanWorker");
-    do {
-        std::unique_ptr<CommandChunk> work;
-        {
-            std::unique_lock lock{work_mutex};
-            Common::CondvarWait(work_cv, lock, stop_token, [&] { return !work_queue.empty(); });
-            if (stop_token.stop_requested()) {
-                continue;
-            }
-            work = std::move(work_queue.front());
-            work_queue.pop();
-        }
-        const bool has_submit = work->HasSubmit();
-        work->ExecuteAll(current_cmdbuf);
-        if (has_submit) {
-            AllocateWorkerCommandBuffers();
-        }
-        std::scoped_lock reserve_lock{reserve_mutex};
-        chunk_reserve.push_back(std::move(work));
-    } while (!stop_token.stop_requested());
-}
-
-void Scheduler::AllocateWorkerCommandBuffers() {
-    const vk::CommandBufferBeginInfo begin_info = {
-        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
-    };
-
-    current_cmdbuf = command_pool.Commit();
-    current_cmdbuf.begin(begin_info);
-}
-
-void Scheduler::Flush(vk::Semaphore signal, vk::Semaphore wait, std::atomic_bool* submit_done) {
+void Scheduler::Flush(std::atomic_bool* submit_done, vk::Semaphore signal, vk::Semaphore wait) {
     const vk::Semaphore handle = master_semaphore.Handle();
     const u64 signal_value = master_semaphore.NextTick();
     state = StateFlags::AllDirty;
@@ -161,6 +103,72 @@ void Scheduler::Flush(vk::Semaphore signal, vk::Semaphore wait, std::atomic_bool
         chunk->MarkSubmit();
         DispatchWork();
     }
+}
+
+void Scheduler::Finish(vk::Semaphore signal, vk::Semaphore wait) {
+    const u64 presubmit_tick = CurrentTick();
+    std::atomic_bool submit_done{false};
+
+    Flush(&submit_done, signal, wait);
+    if (use_worker_thread) {
+        MICROPROFILE_SCOPE(Vulkan_WaitForWorker);
+        submit_done.wait(false);
+    }
+    Wait(presubmit_tick);
+}
+
+void Scheduler::Wait(u64 tick) {
+    if (tick >= master_semaphore.CurrentTick()) {
+        // Make sure we are not waiting for the current tick without signalling
+        Flush();
+    }
+    master_semaphore.Wait(tick);
+}
+
+void Scheduler::DispatchWork() {
+    if (!use_worker_thread || chunk->Empty()) {
+        return;
+    }
+
+    {
+        std::scoped_lock lock{work_mutex};
+        work_queue.push(std::move(chunk));
+    }
+
+    work_cv.notify_one();
+    AcquireNewChunk();
+}
+
+void Scheduler::WorkerThread(std::stop_token stop_token) {
+    Common::SetCurrentThreadName("VulkanWorker");
+    do {
+        std::unique_ptr<CommandChunk> work;
+        {
+            std::unique_lock lock{work_mutex};
+            Common::CondvarWait(work_cv, lock, stop_token, [&] { return !work_queue.empty(); });
+            if (stop_token.stop_requested()) {
+                continue;
+            }
+            work = std::move(work_queue.front());
+            work_queue.pop();
+        }
+        const bool has_submit = work->HasSubmit();
+        work->ExecuteAll(current_cmdbuf);
+        if (has_submit) {
+            AllocateWorkerCommandBuffers();
+        }
+        std::scoped_lock reserve_lock{reserve_mutex};
+        chunk_reserve.push_back(std::move(work));
+    } while (!stop_token.stop_requested());
+}
+
+void Scheduler::AllocateWorkerCommandBuffers() {
+    const vk::CommandBufferBeginInfo begin_info = {
+        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+    };
+
+    current_cmdbuf = command_pool.Commit();
+    current_cmdbuf.begin(begin_info);
 }
 
 void Scheduler::AcquireNewChunk() {

@@ -217,7 +217,7 @@ void RendererVulkan::RenderToMailbox(const Layout::FramebufferLayout& layout,
 
     DrawScreens(frame, layout, flipped);
 
-    scheduler.Flush(frame->render_ready, nullptr, &frame->is_submitted);
+    scheduler.Flush(&frame->is_submitted, frame->render_ready);
     mailbox->Present(frame);
 }
 

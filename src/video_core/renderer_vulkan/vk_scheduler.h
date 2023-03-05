@@ -39,11 +39,14 @@ public:
     ~Scheduler();
 
     /// Sends the current execution context to the GPU.
-    void Flush(vk::Semaphore signal = nullptr, vk::Semaphore wait = nullptr,
-               std::atomic_bool* submit_done = nullptr);
+    void Flush(std::atomic_bool* submit_done = nullptr, vk::Semaphore signal = nullptr,
+               vk::Semaphore wait = nullptr);
 
     /// Sends the current execution context to the GPU and waits for it to complete.
     void Finish(vk::Semaphore signal = nullptr, vk::Semaphore wait = nullptr);
+
+    /// Waits for the given tick to trigger on the GPU.
+    void Wait(u64 tick);
 
     /// Sends currently recorded work to the worker thread.
     void DispatchWork();
@@ -91,16 +94,6 @@ public:
     /// Returns true when a tick has been triggered by the GPU.
     [[nodiscard]] bool IsFree(u64 tick) const noexcept {
         return master_semaphore.IsFree(tick);
-    }
-
-    /// Waits for the given tick to trigger on the GPU.
-    void Wait(u64 tick) {
-        if (tick >= master_semaphore.CurrentTick()) {
-            // Make sure we are not waiting for the current tick without signalling
-            LOG_WARNING(Render_Vulkan, "Flushing current tick");
-            Flush();
-        }
-        master_semaphore.Wait(tick);
     }
 
     /// Returns the master timeline semaphore.
