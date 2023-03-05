@@ -62,6 +62,9 @@ private:
             std::unique_lock lock{mutex};
             if (queue.empty()) {
                 Common::CondvarWait(cv, lock, token, [this] { return !queue.empty(); });
+                if (token.stop_requested()) {
+                    return nullptr;
+                }
             }
             Frame* frame = queue.front();
             queue.pop();
