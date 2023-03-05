@@ -617,7 +617,7 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& inf
     }
 
     SurfaceId surface_id = GetSurface(params, ScaleMatch::Ignore, true);
-    return slot_surfaces[surface_id];
+    return surface_id ? slot_surfaces[surface_id] : slot_surfaces[NULL_SURFACE_ID];
 }
 
 template <class T>
