@@ -615,6 +615,7 @@ void RasterizerVulkan::BindShadowCube(const Pica::TexturingRegs::FullTextureConf
 }
 
 void RasterizerVulkan::BindTextureCube(const Pica::TexturingRegs::FullTextureConfig& texture) {
+    LOG_WARNING(Render_Vulkan, "Using texture cube, might be slow");
     using CubeFace = Pica::TexturingRegs::CubeFace;
     const VideoCore::TextureCubeConfig config = {
         .px = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveX),
