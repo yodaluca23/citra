@@ -2,10 +2,17 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include "common/microprofile.h"
 #include "video_core/renderer_vulkan/vk_descriptor_manager.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "vulkan/vulkan.hpp"
+
+namespace {
+
+MICROPROFILE_DEFINE(Vulkan_DescriptorMgmt, "Vulkan", "Descriptor Set Mgmt", MP_RGB(64, 128, 128));
+
+} // Anonymous namespace
 
 namespace Vulkan {
 
@@ -17,39 +24,36 @@ struct Bindings {
 constexpr static std::array RASTERIZER_SETS = {
     Bindings{
         // Utility set
-        .bindings =
-            {
-                vk::DescriptorType::eUniformBuffer,
-                vk::DescriptorType::eUniformBuffer,
-                vk::DescriptorType::eUniformTexelBuffer,
-                vk::DescriptorType::eUniformTexelBuffer,
-                vk::DescriptorType::eUniformTexelBuffer,
-            },
+        .bindings{
+            vk::DescriptorType::eUniformBufferDynamic,
+            vk::DescriptorType::eUniformBufferDynamic,
+            vk::DescriptorType::eUniformTexelBuffer,
+            vk::DescriptorType::eUniformTexelBuffer,
+            vk::DescriptorType::eUniformTexelBuffer,
+        },
         .binding_count = 5,
     },
     Bindings{
         // Texture set
-        .bindings =
-            {
-                vk::DescriptorType::eCombinedImageSampler,
-                vk::DescriptorType::eCombinedImageSampler,
-                vk::DescriptorType::eCombinedImageSampler,
-                vk::DescriptorType::eCombinedImageSampler,
-            },
+        .bindings{
+            vk::DescriptorType::eCombinedImageSampler,
+            vk::DescriptorType::eCombinedImageSampler,
+            vk::DescriptorType::eCombinedImageSampler,
+            vk::DescriptorType::eCombinedImageSampler,
+        },
         .binding_count = 4,
     },
     Bindings{
         // Shadow set
-        .bindings =
-            {
-                vk::DescriptorType::eStorageImage,
-                vk::DescriptorType::eStorageImage,
-                vk::DescriptorType::eStorageImage,
-                vk::DescriptorType::eStorageImage,
-                vk::DescriptorType::eStorageImage,
-                vk::DescriptorType::eStorageImage,
-                vk::DescriptorType::eStorageImage,
-            },
+        .bindings{
+            vk::DescriptorType::eStorageImage,
+            vk::DescriptorType::eStorageImage,
+            vk::DescriptorType::eStorageImage,
+            vk::DescriptorType::eStorageImage,
+            vk::DescriptorType::eStorageImage,
+            vk::DescriptorType::eStorageImage,
+            vk::DescriptorType::eStorageImage,
+        },
 #ifdef ANDROID
         .binding_count = 4, // TODO: Combine cube faces to a single storage image
                             // some android devices only expose up to four storage
@@ -73,7 +77,7 @@ constexpr vk::ShaderStageFlags ToVkStageFlags(vk::DescriptorType type) {
     case vk::DescriptorType::eUniformBuffer:
     case vk::DescriptorType::eUniformBufferDynamic:
         flags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex |
-                vk::ShaderStageFlagBits::eGeometry | vk::ShaderStageFlagBits::eCompute;
+                vk::ShaderStageFlagBits::eGeometry;
         break;
     default:
         LOG_ERROR(Render_Vulkan, "Unknown descriptor type!");
@@ -109,33 +113,31 @@ void DescriptorManager::SetBinding(u32 set, u32 binding, DescriptorData data) {
 }
 
 void DescriptorManager::BindDescriptorSets() {
-    const bool is_dirty = scheduler.IsStateDirty(StateFlags::DescriptorSets);
-    if (descriptor_set_dirty.none() && !is_dirty) {
-        return;
-    }
+    MICROPROFILE_SCOPE(Vulkan_DescriptorMgmt);
 
-    const vk::Device device = instance.GetDevice();
+    // Update any dirty descriptor sets
     for (u32 i = 0; i < MAX_DESCRIPTOR_SETS; i++) {
-        if (descriptor_set_dirty[i] || is_dirty) {
+        if (descriptor_set_dirty[i]) {
             std::vector<vk::DescriptorSet>& cache = set_cache[i];
             if (cache.empty()) {
                 cache = AllocateSets(descriptor_set_layouts[i], MAX_BATCH_SIZE);
             }
-
             vk::DescriptorSet set = cache.back();
             cache.pop_back();
-            device.updateDescriptorSetWithTemplate(set, update_templates[i], update_data[i][0]);
+
+            instance.GetDevice().updateDescriptorSetWithTemplate(set, update_templates[i],
+                                                                 update_data[i][0]);
+
             descriptor_sets[i] = set;
+            descriptor_set_dirty[i] = false;
         }
     }
 
-    scheduler.Record([this, bound_sets = descriptor_sets](vk::CommandBuffer cmdbuf) {
-        cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout, 0, bound_sets,
-                                  {});
-    });
-
-    descriptor_set_dirty.reset();
-    scheduler.MarkStateNonDirty(StateFlags::DescriptorSets);
+    scheduler.Record(
+        [this, offsets = dynamic_offsets, bound_sets = descriptor_sets](vk::CommandBuffer cmdbuf) {
+            cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout, 0,
+                                      bound_sets, offsets);
+        });
 }
 
 void DescriptorManager::BuildLayouts() {

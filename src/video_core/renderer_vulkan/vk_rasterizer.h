@@ -152,7 +152,8 @@ private:
     std::array<vk::Buffer, 16> vertex_buffers;
     PipelineInfo pipeline_info;
 
-    StreamBuffer stream_buffer;     ///< Vertex+Index+Uniform buffer
+    StreamBuffer stream_buffer;     ///< Vertex+Index buffer
+    StreamBuffer uniform_buffer;    /// Uniform buffer
     StreamBuffer texture_buffer;    ///< Texture buffer
     StreamBuffer texture_lf_buffer; ///< Texture Light-Fog buffer
     vk::BufferView texture_lf_view;

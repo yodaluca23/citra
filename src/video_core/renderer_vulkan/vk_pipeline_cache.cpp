@@ -112,12 +112,12 @@ PipelineCache::Shader::~Shader() {
 PipelineCache::GraphicsPipeline::GraphicsPipeline(
     const Instance& instance_, RenderpassCache& renderpass_cache_, const PipelineInfo& info_,
     vk::PipelineCache pipeline_cache_, vk::PipelineLayout layout_, std::array<Shader*, 3> stages_,
-    Common::ThreadWorker* worker_, bool& wait_built)
+    Common::ThreadWorker* worker_)
     : instance{instance_}, renderpass_cache{renderpass_cache_}, worker{worker_},
       pipeline_layout{layout_}, pipeline_cache{pipeline_cache_}, info{info_}, stages{stages_} {
 
     // Ask the driver if it can give us the pipeline quickly
-    if (ShouldTryCompile(wait_built) && Build(true)) {
+    if (ShouldTryCompile() && Build(true)) {
         return;
     }
 
@@ -135,7 +135,7 @@ PipelineCache::GraphicsPipeline::~GraphicsPipeline() {
     }
 }
 
-bool PipelineCache::GraphicsPipeline::ShouldTryCompile(bool& wait_built) {
+bool PipelineCache::GraphicsPipeline::ShouldTryCompile() {
     // Check if all shader modules are ready
     for (auto& shader : stages) {
         if (shader && !shader->IsDone()) {
@@ -144,13 +144,6 @@ bool PipelineCache::GraphicsPipeline::ShouldTryCompile(bool& wait_built) {
     }
 
     if (!instance.IsPipelineCreationCacheControlSupported()) {
-#ifdef ANDROID
-        // Many android devices do not support the above extension.
-        // To avoid having lots of flickering, if all shaders are
-        // ready compile the pipeline anyway and have the record thread
-        // wait for it.
-        wait_built = true;
-#endif
         return false;
     }
 
@@ -487,7 +480,7 @@ bool PipelineCache::BindPipeline(const PipelineInfo& info, bool wait_built) {
     if (new_pipeline) {
         it->second = std::make_unique<GraphicsPipeline>(
             instance, renderpass_cache, info, pipeline_cache, desc_manager.GetPipelineLayout(),
-            current_shaders, &workers, wait_built);
+            current_shaders, &workers);
     }
 
     GraphicsPipeline* const pipeline{it->second.get()};
@@ -498,7 +491,8 @@ bool PipelineCache::BindPipeline(const PipelineInfo& info, bool wait_built) {
     const bool is_dirty = scheduler.IsStateDirty(StateFlags::Pipeline);
     ApplyDynamic(info, is_dirty);
 
-    if (current_pipeline != pipeline || is_dirty) {
+    const bool pipeline_dirty = (current_pipeline != pipeline) || is_dirty;
+    if (pipeline_dirty) {
         if (!pipeline->IsDone()) {
             scheduler.Record([pipeline](vk::CommandBuffer) { pipeline->WaitDone(); });
         }
@@ -671,6 +665,10 @@ void PipelineCache::BindTexelBuffer(u32 binding, vk::BufferView buffer_view) {
         .buffer_view = buffer_view,
     };
     desc_manager.SetBinding(0, binding, data);
+}
+
+void PipelineCache::SetBufferOffset(u32 binding, u32 offset) {
+    desc_manager.SetDynamicOffset(binding, offset);
 }
 
 void PipelineCache::ApplyDynamic(const PipelineInfo& info, bool is_dirty) {

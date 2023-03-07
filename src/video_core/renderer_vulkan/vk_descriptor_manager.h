@@ -11,7 +11,7 @@ namespace Vulkan {
 
 constexpr u32 MAX_DESCRIPTORS = 7;
 constexpr u32 MAX_DESCRIPTOR_SETS = 3;
-constexpr u32 MAX_BATCH_SIZE = 32;
+constexpr u32 MAX_BATCH_SIZE = 8;
 
 union DescriptorData {
     vk::DescriptorImageInfo image_info;
@@ -36,16 +36,21 @@ public:
     /// Allocates an array of descriptor sets of the provided layout
     std::vector<vk::DescriptorSet> AllocateSets(vk::DescriptorSetLayout layout, u32 num_sets);
 
-    /// Allocates a descriptor set of the provided layout
-    vk::DescriptorSet AllocateSet(vk::DescriptorSetLayout layout) {
-        return AllocateSets(layout, 1)[0];
-    }
-
     /// Binds a resource to the provided binding
     void SetBinding(u32 set, u32 binding, DescriptorData data);
 
     /// Builds descriptor sets that reference the currently bound resources
     void BindDescriptorSets();
+
+    /// Sets the dynamic offsets of the buffer at binding
+    void SetDynamicOffset(u32 binding, u32 new_offset) {
+        dynamic_offsets[binding] = new_offset;
+    }
+
+    /// Allocates a descriptor set of the provided layout
+    [[nodiscard]] vk::DescriptorSet AllocateSet(vk::DescriptorSetLayout layout) {
+        return AllocateSets(layout, 1)[0];
+    }
 
     /// Returns the rasterizer pipeline layout
     [[nodiscard]] vk::PipelineLayout GetPipelineLayout() const noexcept {
@@ -62,6 +67,7 @@ private:
     DescriptorPool pool_provider;
     vk::PipelineLayout pipeline_layout;
     vk::DescriptorPool current_pool;
+    std::array<u32, 2> dynamic_offsets{};
     std::array<vk::DescriptorSetLayout, MAX_DESCRIPTOR_SETS> descriptor_set_layouts;
     std::array<vk::DescriptorUpdateTemplate, MAX_DESCRIPTOR_SETS> update_templates;
     std::array<DescriptorSetData, MAX_DESCRIPTOR_SETS> update_data{};

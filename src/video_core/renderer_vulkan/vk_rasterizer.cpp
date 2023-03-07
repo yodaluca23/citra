@@ -27,13 +27,11 @@ using TriangleTopology = Pica::PipelineRegs::TriangleTopology;
 using VideoCore::SurfaceType;
 
 constexpr u64 STREAM_BUFFER_SIZE = 64 * 1024 * 1024;
+constexpr u64 UNIFORM_BUFFER_SIZE = 4 * 1024 * 1024;
 constexpr u64 TEXTURE_BUFFER_SIZE = 2 * 1024 * 1024;
 
-constexpr vk::BufferUsageFlags BUFFER_USAGE = vk::BufferUsageFlagBits::eVertexBuffer |
-                                              vk::BufferUsageFlagBits::eIndexBuffer |
-                                              vk::BufferUsageFlagBits::eUniformBuffer;
-
-constexpr vk::BufferUsageFlags TEX_BUFFER_USAGE = vk::BufferUsageFlagBits::eUniformTexelBuffer;
+constexpr vk::BufferUsageFlags BUFFER_USAGE =
+    vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eIndexBuffer;
 
 struct DrawParams {
     u32 vertex_count;
@@ -63,8 +61,12 @@ RasterizerVulkan::RasterizerVulkan(Memory::MemorySystem& memory,
                                                                                 runtime},
       pipeline_cache{instance, scheduler, renderpass_cache, desc_manager},
       stream_buffer{instance, scheduler, BUFFER_USAGE, STREAM_BUFFER_SIZE},
-      texture_buffer{instance, scheduler, TEX_BUFFER_USAGE, TextureBufferSize(instance)},
-      texture_lf_buffer{instance, scheduler, TEX_BUFFER_USAGE, TextureBufferSize(instance)},
+      uniform_buffer{instance, scheduler, vk::BufferUsageFlagBits::eUniformBuffer,
+                     UNIFORM_BUFFER_SIZE},
+      texture_buffer{instance, scheduler, vk::BufferUsageFlagBits::eUniformTexelBuffer,
+                     TextureBufferSize(instance)},
+      texture_lf_buffer{instance, scheduler, vk::BufferUsageFlagBits::eUniformTexelBuffer,
+                        TextureBufferSize(instance)},
       async_shaders{Settings::values.async_shader_compilation.GetValue()} {
 
     vertex_buffers.fill(stream_buffer.Handle());
@@ -100,9 +102,9 @@ RasterizerVulkan::RasterizerVulkan(Memory::MemorySystem& memory,
     });
 
     // Since we don't have access to VK_EXT_descriptor_indexing we need to intiallize
-    // all descriptor sets even the ones we don't use. Use default_texture for this
-    pipeline_cache.BindBuffer(0, stream_buffer.Handle(), 0, 1);
-    pipeline_cache.BindBuffer(1, stream_buffer.Handle(), 0, 1);
+    // all descriptor sets even the ones we don't use.
+    pipeline_cache.BindBuffer(0, uniform_buffer.Handle(), 0, sizeof(Pica::Shader::VSUniformData));
+    pipeline_cache.BindBuffer(1, uniform_buffer.Handle(), 0, sizeof(Pica::Shader::UniformData));
     pipeline_cache.BindTexelBuffer(2, texture_lf_view);
     pipeline_cache.BindTexelBuffer(3, texture_rg_view);
     pipeline_cache.BindTexelBuffer(4, texture_rgba_view);
@@ -1107,16 +1109,16 @@ void RasterizerVulkan::UploadUniforms(bool accelerate_draw) {
     }
 
     const u64 uniform_size = uniform_size_aligned_vs + uniform_size_aligned_fs;
-    auto [uniforms, offset, invalidate] = stream_buffer.Map(uniform_size, uniform_buffer_alignment);
+    auto [uniforms, offset, invalidate] =
+        uniform_buffer.Map(uniform_size, uniform_buffer_alignment);
 
     u32 used_bytes = 0;
     if (sync_vs) {
         Pica::Shader::VSUniformData vs_uniforms;
         vs_uniforms.uniforms.SetFromRegs(regs.vs, Pica::g_state.vs);
-        std::memcpy(uniforms + used_bytes, &vs_uniforms, sizeof(vs_uniforms));
+        std::memcpy(uniforms, &vs_uniforms, sizeof(vs_uniforms));
 
-        pipeline_cache.BindBuffer(0, stream_buffer.Handle(), offset + used_bytes,
-                                  sizeof(vs_uniforms));
+        pipeline_cache.SetBufferOffset(0, offset);
         used_bytes += static_cast<u32>(uniform_size_aligned_vs);
     }
 
@@ -1124,13 +1126,12 @@ void RasterizerVulkan::UploadUniforms(bool accelerate_draw) {
         std::memcpy(uniforms + used_bytes, &uniform_block_data.data,
                     sizeof(Pica::Shader::UniformData));
 
-        pipeline_cache.BindBuffer(1, stream_buffer.Handle(), offset + used_bytes,
-                                  sizeof(uniform_block_data.data));
+        pipeline_cache.SetBufferOffset(1, offset + used_bytes);
         uniform_block_data.dirty = false;
         used_bytes += static_cast<u32>(uniform_size_aligned_fs);
     }
 
-    stream_buffer.Commit(used_bytes);
+    uniform_buffer.Commit(used_bytes);
 }
 
 } // namespace Vulkan

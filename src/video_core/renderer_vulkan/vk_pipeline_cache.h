@@ -151,7 +151,7 @@ class PipelineCache {
         GraphicsPipeline(const Instance& instance, RenderpassCache& renderpass_cache,
                          const PipelineInfo& info, vk::PipelineCache pipeline_cache,
                          vk::PipelineLayout layout, std::array<Shader*, 3> stages,
-                         Common::ThreadWorker* worker, bool& wait_built);
+                         Common::ThreadWorker* worker);
         ~GraphicsPipeline();
 
         bool Build(bool fail_on_compile_required = false);
@@ -161,7 +161,7 @@ class PipelineCache {
         }
 
     private:
-        bool ShouldTryCompile(bool& wait_built);
+        bool ShouldTryCompile();
 
     private:
         const Instance& instance;
@@ -217,6 +217,9 @@ public:
 
     /// Binds a buffer to the specified binding
     void BindTexelBuffer(u32 binding, vk::BufferView buffer_view);
+
+    /// Sets the dynamic offset for the uniform buffer at binding
+    void SetBufferOffset(u32 binding, u32 offset);
 
 private:
     /// Applies dynamic pipeline state to the current command buffer
