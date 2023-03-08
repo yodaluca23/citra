@@ -153,9 +153,6 @@ void TextureRuntime::Clear() {
     scheduler.Finish();
 
     VmaAllocator allocator = instance.GetAllocator();
-    vk::Device device = instance.GetDevice();
-    device.waitIdle();
-
     renderpass_cache.ClearFramebuffers();
     for (const auto& [key, alloc] : texture_recycler) {
         vmaDestroyImage(allocator, alloc.image, alloc.allocation);
