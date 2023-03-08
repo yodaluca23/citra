@@ -9,8 +9,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <boost/icl/interval_map.hpp>
-#include <boost/range/iterator_range.hpp>
-#include "common/thread_worker.h"
 #include "video_core/rasterizer_cache/sampler_params.h"
 #include "video_core/rasterizer_cache/surface_params.h"
 #include "video_core/rasterizer_cache/utils.h"
@@ -41,7 +39,7 @@ DECLARE_ENUM_FLAG_OPERATORS(MatchFlags);
 class CustomTexManager;
 
 template <class T>
-class RasterizerCache : NonCopyable {
+class RasterizerCache {
     /// Address shift for caching surfaces into a hash table
     static constexpr u64 CITRA_PAGEBITS = 18;
 
@@ -61,6 +59,11 @@ class RasterizerCache : NonCopyable {
     struct RenderTargets {
         SurfaceId color_surface_id;
         SurfaceId depth_surface_id;
+    };
+
+    struct CubeParams {
+        SurfaceId cube_id;
+        std::array<s64, 6> ticks{};
     };
 
 public:
@@ -203,13 +206,13 @@ private:
     SurfaceMap dirty_regions;
     std::vector<SurfaceId> remove_surfaces;
     u16 resolution_scale_factor;
-    std::unordered_map<TextureCubeConfig, SurfaceId> texture_cube_cache;
 
     // The internal surface cache is based on buckets of 256KB.
     // This fits better for the purpose of this cache as textures are normaly
     // large in size.
     std::unordered_map<u64, std::vector<SurfaceId>, Common::IdentityHash<u64>> page_table;
     std::unordered_map<SamplerParams, SamplerId> samplers;
+    std::unordered_map<TextureCubeConfig, CubeParams> texture_cube_cache;
 
     SlotVector<Surface> slot_surfaces;
     SlotVector<Sampler> slot_samplers;

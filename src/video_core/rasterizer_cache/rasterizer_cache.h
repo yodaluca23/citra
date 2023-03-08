@@ -5,6 +5,7 @@
 #pragma once
 
 #include <boost/container/small_vector.hpp>
+#include <boost/range/iterator_range.hpp>
 #include "common/alignment.h"
 #include "common/logging/log.h"
 #include "common/microprofile.h"
@@ -627,6 +628,8 @@ auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> Surf
     }
 
     auto [it, new_surface] = texture_cube_cache.try_emplace(config);
+    CubeParams& params = it->second;
+
     if (new_surface) {
         const SurfaceParams cube_params = {
             .addr = config.px,
@@ -638,11 +641,12 @@ auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> Surf
             .pixel_format = PixelFormatFromTextureFormat(config.format),
             .type = SurfaceType::Texture,
         };
-        it->second = CreateSurface(cube_params);
+        params.cube_id = CreateSurface(cube_params);
     }
 
-    const SurfaceId cube_id = it->second;
-    const std::array addresses = {config.px, config.nx, config.py, config.ny, config.pz, config.nz};
+    const std::array addresses = {
+        config.px, config.nx, config.py, config.ny, config.pz, config.nz,
+    };
 
     for (std::size_t i = 0; i < addresses.size(); i++) {
         Pica::Texture::TextureInfo info = {
@@ -654,25 +658,27 @@ auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> Surf
         info.SetDefaultStride();
 
         Surface& face_surface = GetTextureSurface(info, config.levels - 1);
-        Surface& cube = slot_surfaces[cube_id];
+        Surface& cube = slot_surfaces[params.cube_id];
 
-        const u32 face = static_cast<u32>(i);
-        const u32 scaled_size = cube.GetScaledWidth();
-        for (u32 level = 0; level < face_surface.levels; level++) {
-            const TextureCopy texture_copy = {
-                .src_level = level,
-                .dst_level = level,
-                .src_layer = 0,
-                .dst_layer = face,
-                .src_offset = {0, 0},
-                .dst_offset = {0, 0},
-                .extent = {scaled_size >> level, scaled_size >> level},
-            };
-            runtime.CopyTextures(face_surface, cube, texture_copy);
+        if (face_surface.ModificationTick() != params.ticks[i]) {
+            const u32 scaled_size = cube.GetScaledWidth();
+            for (u32 level = 0; level < face_surface.levels; level++) {
+                const TextureCopy texture_copy = {
+                    .src_level = level,
+                    .dst_level = level,
+                    .src_layer = 0,
+                    .dst_layer = static_cast<u32>(i),
+                    .src_offset = {0, 0},
+                    .dst_offset = {0, 0},
+                    .extent = {scaled_size >> level, scaled_size >> level},
+                };
+                runtime.CopyTextures(face_surface, cube, texture_copy);
+            }
+            params.ticks[i] = face_surface.ModificationTick();
         }
     }
 
-    return slot_surfaces[cube_id];
+    return slot_surfaces[params.cube_id];
 }
 
 template <class T>
@@ -886,7 +892,7 @@ void RasterizerCache<T>::ValidateSurface(SurfaceId surface_id, PAddr addr, u32 s
 
         const auto NotifyValidated = [&](SurfaceInterval interval) {
             level_regions.erase(interval);
-            surface.invalid_regions.erase(interval);
+            surface.MarkValid(interval);
         };
 
         while (!level_regions.empty()) {
@@ -1245,7 +1251,7 @@ void RasterizerCache<T>::InvalidateRegion(PAddr addr, u32 size, SurfaceId region
         ASSERT(addr >= region_owner.addr && addr + size <= region_owner.end);
         // Surfaces can't have a gap
         ASSERT(region_owner.width == region_owner.stride);
-        region_owner.invalid_regions.erase(invalid_interval);
+        region_owner.MarkValid(invalid_interval);
     }
 
     ForEachSurfaceInRegion(addr, size, [&](SurfaceId surface_id, Surface& surface) {
@@ -1262,7 +1268,7 @@ void RasterizerCache<T>::InvalidateRegion(PAddr addr, u32 size, SurfaceId region
         }
 
         const SurfaceInterval interval = surface.GetInterval() & invalid_interval;
-        surface.invalid_regions.insert(interval);
+        surface.MarkInvalid(interval);
 
         // If the surface has no salvageable data it should be removed from the cache to avoid
         // clogging the data structure
@@ -1287,7 +1293,7 @@ template <class T>
 SurfaceId RasterizerCache<T>::CreateSurface(const SurfaceParams& params) {
     SurfaceId surface_id = slot_surfaces.insert(runtime, params);
     Surface& surface = slot_surfaces[surface_id];
-    surface.invalid_regions.insert(surface.GetInterval());
+    surface.MarkInvalid(surface.GetInterval());
     return surface_id;
 }
 

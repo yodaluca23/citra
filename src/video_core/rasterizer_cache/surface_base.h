@@ -14,8 +14,43 @@ using SurfaceRegions = boost::icl::interval_set<PAddr, std::less, SurfaceInterva
 
 class SurfaceBase : public SurfaceParams {
 public:
-    SurfaceBase();
     explicit SurfaceBase(const SurfaceParams& params);
+
+    bool Overlaps(PAddr overlap_addr, size_t overlap_size) const noexcept {
+        const PAddr overlap_end = overlap_addr + static_cast<PAddr>(overlap_size);
+        return addr < overlap_end && overlap_addr < end;
+    }
+
+    u64 ModificationTick() const noexcept {
+        return modification_tick;
+    }
+
+    CustomPixelFormat CustomFormat() const noexcept {
+        return custom_format;
+    }
+
+    bool IsCustom() const noexcept {
+        return is_custom;
+    }
+
+    bool IsRegionValid(SurfaceInterval interval) const {
+        return (invalid_regions.find(interval) == invalid_regions.end());
+    }
+
+    void MarkValid(SurfaceInterval interval) {
+        invalid_regions.erase(interval);
+        modification_tick++;
+    }
+
+    void MarkInvalid(SurfaceInterval interval) {
+        invalid_regions.insert(interval);
+        modification_tick++;
+    }
+
+    bool IsFullyInvalid() const {
+        auto interval = GetInterval();
+        return *invalid_regions.equal_range(interval).first == interval;
+    }
 
     /// Returns true when this surface can be used to fill the fill_interval of dest_surface
     bool CanFill(const SurfaceParams& dest_surface, SurfaceInterval fill_interval) const;
@@ -29,28 +64,6 @@ public:
     /// Returns the clear value used to validate another surface from this fill surface
     ClearValue MakeClearValue(PAddr copy_addr, PixelFormat dst_format);
 
-    bool IsCustom() const noexcept {
-        return is_custom;
-    }
-
-    CustomPixelFormat CustomFormat() const noexcept {
-        return custom_format;
-    }
-
-    bool Overlaps(PAddr overlap_addr, size_t overlap_size) const noexcept {
-        const PAddr overlap_end = overlap_addr + static_cast<PAddr>(overlap_size);
-        return addr < overlap_end && overlap_addr < end;
-    }
-
-    bool IsRegionValid(SurfaceInterval interval) const {
-        return (invalid_regions.find(interval) == invalid_regions.end());
-    }
-
-    bool IsFullyInvalid() const {
-        auto interval = GetInterval();
-        return *invalid_regions.equal_range(interval).first == interval;
-    }
-
 private:
     /// Returns the fill buffer value starting from copy_addr
     std::array<u8, 4> MakeFillBuffer(PAddr copy_addr);
@@ -63,6 +76,7 @@ public:
     SurfaceRegions invalid_regions;
     std::array<u8, 4> fill_data;
     u32 fill_size = 0;
+    u64 modification_tick = 1;
 };
 
 } // namespace VideoCore

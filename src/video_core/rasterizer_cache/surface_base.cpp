@@ -9,8 +9,6 @@
 
 namespace VideoCore {
 
-SurfaceBase::SurfaceBase() = default;
-
 SurfaceBase::SurfaceBase(const SurfaceParams& params) : SurfaceParams{params} {}
 
 bool SurfaceBase::CanFill(const SurfaceParams& dest_surface, SurfaceInterval fill_interval) const {
