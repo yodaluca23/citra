@@ -35,17 +35,16 @@ u32 AttribBytes(Pica::PipelineRegs::VertexAttributeFormat format, u32 size) {
     return 0;
 }
 
-char MakeAttribPrefix(Pica::PipelineRegs::VertexAttributeFormat format) {
+AttribLoadFlags MakeAttribLoadFlag(Pica::PipelineRegs::VertexAttributeFormat format) {
     switch (format) {
-    case Pica::PipelineRegs::VertexAttributeFormat::FLOAT:
-        return '\0';
     case Pica::PipelineRegs::VertexAttributeFormat::BYTE:
     case Pica::PipelineRegs::VertexAttributeFormat::SHORT:
-        return 'i';
+        return AttribLoadFlags::Sint;
     case Pica::PipelineRegs::VertexAttributeFormat::UBYTE:
-        return 'u';
+        return AttribLoadFlags::Uint;
+    default:
+        return AttribLoadFlags::Float;
     }
-    return '\0';
 }
 
 vk::ShaderStageFlagBits MakeShaderStage(std::size_t index) {
@@ -168,13 +167,20 @@ bool PipelineCache::GraphicsPipeline::Build(bool fail_on_compile_required) {
     std::array<vk::VertexInputAttributeDescription, MAX_VERTEX_ATTRIBUTES> attributes;
     for (u32 i = 0; i < info.vertex_layout.attribute_count; i++) {
         const auto& attr = info.vertex_layout.attributes[i];
-        const FormatTraits traits = instance.GetTraits(attr.type, attr.size);
+        const FormatTraits& traits = instance.GetTraits(attr.type, attr.size);
         attributes[i] = vk::VertexInputAttributeDescription{
             .location = attr.location,
             .binding = attr.binding,
             .format = traits.native,
             .offset = attr.offset,
         };
+
+        // At the end there's always the fixed binding which takes up
+        // at least 16 bytes so we should always be able to alias.
+        if (traits.requires_emulation) {
+            const FormatTraits& comp_four_traits = instance.GetTraits(attr.type, 4);
+            attributes[i].format = comp_four_traits.native;
+        }
     }
 
     const vk::PipelineVertexInputStateCreateInfo vertex_input_info = {
@@ -519,9 +525,14 @@ bool PipelineCache::UseProgrammableVertexShader(const Pica::Regs& regs,
     for (u32 i = 0; i < layout.attribute_count; i++) {
         const VertexAttribute& attr = layout.attributes[i];
         const FormatTraits& traits = instance.GetTraits(attr.type, attr.size);
+        const u32 location = attr.location.Value();
+        AttribLoadFlags& flags = config.state.load_flags[location];
+
         if (traits.requires_conversion) {
-            const u32 location = attr.location.Value();
-            config.state.attrib_prefix[location] = MakeAttribPrefix(attr.type);
+            flags = MakeAttribLoadFlag(attr.type);
+        }
+        if (traits.requires_emulation) {
+            flags |= AttribLoadFlags::ZeroW;
         }
     }
 

@@ -28,9 +28,10 @@ struct FormatTraits {
     bool attachment_support = false; ///< True if the format supports being used as an attachment
     bool storage_support = false;    ///< True if the format supports storage operations
     bool requires_conversion =
-        false;                   ///< True if the format requires conversion to the native format
-    vk::ImageUsageFlags usage{}; ///< Most supported usage for the native format
-    vk::ImageAspectFlags aspect; ///< Aspect flags of the format
+        false; ///< True if the format requires conversion to the native format
+    bool requires_emulation = false;            ///< True if the format requires emulation
+    vk::ImageUsageFlags usage{};                ///< Most supported usage for the native format
+    vk::ImageAspectFlags aspect;                ///< Aspect flags of the format
     vk::Format native = vk::Format::eUndefined; ///< Closest possible native format
 };
 
@@ -278,6 +279,9 @@ private:
     /// Returns the optimal supported usage for the requested format
     [[nodiscard]] FormatTraits DetermineTraits(VideoCore::PixelFormat pixel_format,
                                                vk::Format format);
+
+    /// Determines the best available vertex attribute format emulation
+    void DetermineEmulation(Pica::PipelineRegs::VertexAttributeFormat format, bool& needs_cast);
 
     /// Creates the format compatibility table for the current device
     void CreateFormatTable();

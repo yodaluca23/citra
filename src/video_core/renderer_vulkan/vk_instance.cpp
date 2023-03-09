@@ -368,11 +368,11 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
     LOG_INFO(Render_Vulkan, "Creating logical device for physical device: {}",
              properties.deviceName);
 
+    CollectTelemetryParameters();
     CreateDevice();
     CreateFormatTable();
     CreateCustomFormatTable();
     CreateAttribTable();
-    CollectTelemetryParameters();
 }
 
 Instance::~Instance() {
@@ -549,6 +549,14 @@ void Instance::CreateCustomFormatTable() {
     }
 }
 
+void Instance::DetermineEmulation(Pica::PipelineRegs::VertexAttributeFormat format,
+                                  bool& needs_cast) {
+    // Check if (u)scaled formats can be used to emulate the 3 component format
+    vk::Format two_comp_format = MakeAttributeFormat(format, 2);
+    vk::FormatProperties format_properties = physical_device.getFormatProperties(two_comp_format);
+    needs_cast = !(format_properties.bufferFeatures & vk::FormatFeatureFlagBits::eVertexBuffer);
+}
+
 void Instance::CreateAttribTable() {
     constexpr std::array attrib_formats = {
         Pica::PipelineRegs::VertexAttributeFormat::BYTE,
@@ -560,6 +568,7 @@ void Instance::CreateAttribTable() {
     for (const auto& format : attrib_formats) {
         for (u32 count = 1; count <= 4; count++) {
             bool needs_cast{false};
+            bool needs_emulation{false};
             vk::Format attrib_format = MakeAttributeFormat(format, count);
             vk::FormatProperties format_properties =
                 physical_device.getFormatProperties(attrib_format);
@@ -569,14 +578,18 @@ void Instance::CreateAttribTable() {
                 format_properties = physical_device.getFormatProperties(attrib_format);
                 if (!(format_properties.bufferFeatures &
                       vk::FormatFeatureFlagBits::eVertexBuffer)) {
-                    ASSERT_MSG(false, "Fallback format {} unsupported, device unsuitable!",
-                               vk::to_string(attrib_format));
+                    ASSERT_MSG(
+                        count == 3,
+                        "Vertex attribute emulation is only supported for 3 component formats");
+                    DetermineEmulation(format, needs_cast);
+                    needs_emulation = true;
                 }
             }
 
             const u32 index = static_cast<u32>(format) * 4 + count - 1;
             attrib_table[index] = FormatTraits{
                 .requires_conversion = needs_cast,
+                .requires_emulation = needs_emulation,
                 .native = attrib_format,
             };
         }

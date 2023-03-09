@@ -209,6 +209,7 @@ void PicaShaderConfigCommon::Init(const Pica::RasterizerRegs& rasterizer,
     sanitize_mul = VideoCore::g_hw_shader_accurate_mul;
 
     num_outputs = 0;
+    load_flags.fill(AttribLoadFlags::Float);
     output_map.fill(16);
 
     for (int reg : Common::BitSet<u32>(regs.output_mask)) {
@@ -1609,6 +1610,17 @@ void main() {
     return out;
 }
 
+std::string_view MakeLoadPrefix(AttribLoadFlags flag) {
+    if (True(flag & AttribLoadFlags::Float)) {
+        return "";
+    } else if (True(flag & AttribLoadFlags::Sint)) {
+        return "i";
+    } else if (True(flag & AttribLoadFlags::Uint)) {
+        return "u";
+    }
+    return "";
+}
+
 std::optional<std::string> GenerateVertexShader(const Pica::Shader::ShaderSetup& setup,
                                                 const PicaVSConfig& config) {
     std::string out = "#extension GL_ARB_separate_shader_objects : enable\n";
@@ -1654,14 +1666,11 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
     // input attributes declaration
     for (std::size_t i = 0; i < used_regs.size(); ++i) {
         if (used_regs[i]) {
-            if (!config.state.attrib_prefix[i]) {
-                out += fmt::format("layout(location = {0}) in vec4 vs_in_reg{0};\n", i);
-            } else {
-                const char prefix = config.state.attrib_prefix[i];
-                out += fmt::format("layout(location = {0}) in {1}vec4 vs_in_typed_reg{0};\n", i,
-                                   prefix);
-                out += fmt::format("vec4 vs_in_reg{0} = vec4(vs_in_typed_reg{0});\n", i);
-            }
+            const auto flags = config.state.load_flags[i];
+            const std::string_view prefix = MakeLoadPrefix(flags);
+            out += fmt::format("layout(location = {0}) in {1}vec4 vs_in_typed_reg{0};\n", i,
+                               prefix);
+            out += fmt::format("vec4 vs_in_reg{0} = vec4(vs_in_typed_reg{0});\n", i);
         }
     }
     out += '\n';
@@ -1737,6 +1746,11 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
     out += "\nvoid main() {\n";
     for (u32 i = 0; i < config.state.num_outputs; ++i) {
         out += fmt::format("    vs_out_attr{} = vec4(0.0, 0.0, 0.0, 1.0);\n", i);
+    }
+    for (std::size_t i = 0; i < used_regs.size(); ++i) {
+        if (used_regs[i] && True(config.state.load_flags[i] & AttribLoadFlags::ZeroW)) {
+            out += fmt::format("vs_in_reg{0}.w = 0;\n", i);
+        }
     }
     out += "\n    exec_shader();\nEmitVtx();\n}\n\n";
 

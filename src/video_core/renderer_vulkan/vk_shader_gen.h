@@ -143,6 +143,14 @@ struct PicaFSConfig : Common::HashableStruct<PicaFSConfigState> {
     }
 };
 
+enum class AttribLoadFlags {
+    Float = 1 << 0,
+    Sint = 1 << 1,
+    Uint = 1 << 2,
+    ZeroW = 1 << 3,
+};
+DECLARE_ENUM_FLAG_OPERATORS(AttribLoadFlags)
+
 /**
  * This struct contains common information to identify a GL vertex/geometry shader generated from
  * PICA vertex/geometry shader.
@@ -157,7 +165,8 @@ struct PicaShaderConfigCommon {
     bool sanitize_mul;
 
     u32 num_outputs;
-    std::array<char, 16> attrib_prefix; ///< Type prefix for casted attributes
+    // Load operations to apply to the input vertex data
+    std::array<AttribLoadFlags, 16> load_flags;
 
     // output_map[output register index] -> output attribute index
     std::array<u32, 16> output_map;
