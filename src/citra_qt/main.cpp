@@ -1109,6 +1109,9 @@ void GMainWindow::BootGame(const QString& filename) {
 
         LOG_INFO(Frontend, "Using per game config file for title id {}", config_file_name);
         Settings::LogSettings();
+
+        // Update API indicator to reflect the per-game graphics API, if set.
+        UpdateAPIIndicator(false);
     }
 
     // Save configurations
@@ -1743,6 +1746,9 @@ void GMainWindow::OnPauseContinueGame() {
 void GMainWindow::OnStopGame() {
     ShutdownGame();
     Settings::RestoreGlobalState(false);
+
+    // If a per-game graphics API was set we should reset to the global option
+    UpdateAPIIndicator(false);
 }
 
 void GMainWindow::OnLoadComplete() {

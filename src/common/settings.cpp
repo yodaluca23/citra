@@ -199,6 +199,8 @@ void RestoreGlobalState(bool is_powered_on) {
     // Renderer
     values.use_hw_renderer.SetGlobal(true);
     values.use_hw_shader.SetGlobal(true);
+    values.graphics_api.SetGlobal(true);
+    values.physical_device.SetGlobal(true);
     values.separable_shader.SetGlobal(true);
     values.async_shader_compilation.SetGlobal(true);
     values.use_disk_shader_cache.SetGlobal(true);

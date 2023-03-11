@@ -44,4 +44,5 @@ private:
     ConfigurationShared::CheckState spirv_shader_gen;
     std::unique_ptr<Ui::ConfigureGraphics> ui;
     QColor bg_color;
+    bool physical_devices_discovered = false;
 };
