@@ -39,11 +39,14 @@ public:
     ~Scheduler();
 
     /// Sends the current execution context to the GPU.
-    void Flush(std::atomic_bool* submit_done = nullptr, vk::Semaphore signal = nullptr,
-               vk::Semaphore wait = nullptr);
+    void Flush(vk::Semaphore signal = nullptr, vk::Semaphore wait = nullptr);
 
     /// Sends the current execution context to the GPU and waits for it to complete.
     void Finish(vk::Semaphore signal = nullptr, vk::Semaphore wait = nullptr);
+
+    /// Waits for the worker thread to finish executing everything. After this function returns it's
+    /// safe to touch worker resources.
+    void WaitWorker();
 
     /// Waits for the given tick to trigger on the GPU.
     void Wait(u64 tick);
@@ -190,6 +193,8 @@ private:
 
     void AllocateWorkerCommandBuffers();
 
+    void SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wait_semaphore);
+
     void AcquireNewChunk();
 
 private:
@@ -206,6 +211,7 @@ private:
     std::mutex work_mutex;
     std::mutex queue_mutex;
     std::condition_variable_any work_cv;
+    std::condition_variable wait_cv;
     std::jthread worker_thread;
     bool use_worker_thread;
 };

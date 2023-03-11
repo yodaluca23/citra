@@ -30,7 +30,6 @@ struct Frame {
     vk::Fence present_done{};
     std::mutex fence_mutex{};
     vk::CommandBuffer cmdbuf{};
-    std::atomic_bool is_submitted{false};
 };
 
 class PresentMailbox final {

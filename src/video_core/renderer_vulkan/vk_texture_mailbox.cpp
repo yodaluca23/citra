@@ -163,7 +163,6 @@ Frame* PresentMailbox::GetRenderFrame() {
     }
 
     device.resetFences(frame->present_done);
-    frame->is_submitted = false;
     return frame;
 }
 
@@ -327,9 +326,6 @@ void PresentMailbox::CopyToSwapchain(Frame* frame) {
         .signalSemaphoreCount = 1,
         .pSignalSemaphores = &present_ready,
     };
-
-    // Ensure we won't wait on a semaphore that has no way of being signaled
-    frame->is_submitted.wait(false);
 
     try {
         std::scoped_lock lock{scheduler.QueueMutex(), frame->fence_mutex};

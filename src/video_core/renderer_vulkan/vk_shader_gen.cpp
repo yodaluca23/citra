@@ -1668,8 +1668,8 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
         if (used_regs[i]) {
             const auto flags = config.state.load_flags[i];
             const std::string_view prefix = MakeLoadPrefix(flags);
-            out += fmt::format("layout(location = {0}) in {1}vec4 vs_in_typed_reg{0};\n", i,
-                               prefix);
+            out +=
+                fmt::format("layout(location = {0}) in {1}vec4 vs_in_typed_reg{0};\n", i, prefix);
             out += fmt::format("vec4 vs_in_reg{0} = vec4(vs_in_typed_reg{0});\n", i);
         }
     }
