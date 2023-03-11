@@ -74,6 +74,7 @@
 #include "core/file_sys/archive_extsavedata.h"
 #include "core/file_sys/archive_source_sd_savedata.h"
 #include "core/frontend/applets/default_applets.h"
+#include "core/hle/service/cfg/cfg.h"
 #include "core/hle/service/fs/archive.h"
 #include "core/hle/service/nfc/nfc.h"
 #include "core/loader/loader.h"
@@ -312,6 +313,8 @@ void GMainWindow::InitializeWidgets() {
     // Setup updater
     updater = new Updater(this);
     UISettings::values.updater_found = updater->HasUpdater();
+
+    UpdateBootHomeMenuState();
 
     // Create status bar
     message_label = new QLabel();
@@ -754,6 +757,7 @@ void GMainWindow::ConnectMenuEvents() {
     // File
     connect_menu(ui->action_Load_File, &GMainWindow::OnMenuLoadFile);
     connect_menu(ui->action_Install_CIA, &GMainWindow::OnMenuInstallCIA);
+    connect_menu(ui->action_Boot_Home_Menu, &GMainWindow::OnMenuBootHomeMenu);
     connect_menu(ui->action_Exit, &QMainWindow::close);
     connect_menu(ui->action_Load_Amiibo, &GMainWindow::OnLoadAmiibo);
     connect_menu(ui->action_Remove_Amiibo, &GMainWindow::OnRemoveAmiibo);
@@ -1597,6 +1601,20 @@ void GMainWindow::OnMenuInstallCIA() {
     InstallCIA(filepaths);
 }
 
+static std::string GetHomeMenuPath() {
+    static const std::array<u64, 7> home_menu_tids = {
+        0x0004003000008202, 0x0004003000008F02, 0x0004003000009802, 0x0004003000009802,
+        0x000400300000A102, 0x000400300000A902, 0x000400300000B102};
+
+    Service::CFG::Module cfg{};
+    return Service::AM::GetTitleContentPath(Service::FS::MediaType::NAND,
+                                            home_menu_tids[cfg.GetRegionValue()]);
+}
+
+void GMainWindow::OnMenuBootHomeMenu() {
+    BootGame(QString::fromStdString(GetHomeMenuPath()));
+}
+
 void GMainWindow::InstallCIA(QStringList filepaths) {
     ui->action_Install_CIA->setEnabled(false);
     game_list->SetDirectoryWatcherEnabled(false);
@@ -1948,6 +1966,7 @@ void GMainWindow::OnConfigure() {
         }
         UpdateSecondaryWindowVisibility();
         UpdateAPIIndicator(false);
+        UpdateBootHomeMenuState();
     } else {
         Settings::values.input_profiles = old_input_profiles;
         Settings::values.touch_from_button_maps = old_touch_from_button_maps;
@@ -2239,6 +2258,12 @@ void GMainWindow::UpdateStatusBar() {
     emu_speed_label->setVisible(true);
     game_fps_label->setVisible(true);
     emu_frametime_label->setVisible(true);
+}
+
+void GMainWindow::UpdateBootHomeMenuState() {
+    const std::string home_menu_path = GetHomeMenuPath();
+    ui->action_Boot_Home_Menu->setEnabled(!home_menu_path.empty() &&
+                                          FileUtil::Exists(GetHomeMenuPath()));
 }
 
 void GMainWindow::HideMouseCursor() {
