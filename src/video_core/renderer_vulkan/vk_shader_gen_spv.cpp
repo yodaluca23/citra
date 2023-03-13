@@ -71,7 +71,7 @@ void FragmentModule::Generate() {
         break;
     case TexturingRegs::FogMode::Gas:
         WriteGas();
-        break;
+        return;
     default:
         break;
     }
