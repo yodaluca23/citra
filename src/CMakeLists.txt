@@ -102,10 +102,13 @@ if (MSVC)
     set(CMAKE_EXE_LINKER_FLAGS_DEBUG   "/DEBUG /MANIFEST:NO" CACHE STRING "" FORCE)
     set(CMAKE_EXE_LINKER_FLAGS_RELEASE "/DEBUG /MANIFEST:NO /INCREMENTAL:NO /OPT:REF,ICF" CACHE STRING "" FORCE)
 else()
-    add_compile_options(
-        -Wall
-        -Wno-attributes
-    )
+    if (NOT IOS)
+        # iOS uses Swift for GUI code, but SwiftDriver can't handle -Wall
+        add_compile_options(
+            -Wall
+            -Wno-attributes
+        )
+    endif()
 
     if (APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL Clang)
         add_compile_options("-stdlib=libc++")
@@ -162,6 +165,8 @@ endif()
 if (ANDROID)
     add_subdirectory(android/app/src/main/jni)
     target_include_directories(citra-android PRIVATE android/app/src/main)
+elseif(IOS)
+    add_subdirectory(citra_ios)
 else()
     add_subdirectory(dedicated_room)
 endif()
