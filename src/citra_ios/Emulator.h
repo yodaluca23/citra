@@ -1,7 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <MetalKit/MetalKit.h>
 
-@interface Emulator: NSObject
+@interface Emulator : NSObject
 @property(atomic, assign) BOOL useJIT;
 @property(atomic, copy) NSURL* executableURL;
 
