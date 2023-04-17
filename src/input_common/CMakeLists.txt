@@ -1,10 +1,6 @@
 add_library(input_common STATIC
     analog_from_button.cpp
     analog_from_button.h
-    gcadapter/gc_adapter.cpp
-    gcadapter/gc_adapter.h
-    gcadapter/gc_poller.cpp
-    gcadapter/gc_poller.h
     keyboard.cpp
     keyboard.h
     main.cpp
@@ -23,6 +19,15 @@ add_library(input_common STATIC
     udp/udp.cpp
     udp/udp.h
 )
+
+if(NOT DISABLE_LIBUSB)
+    target_sources(input_common PUBLIC
+        gcadapter/gc_adapter.cpp
+        gcadapter/gc_adapter.h
+        gcadapter/gc_poller.cpp
+        gcadapter/gc_poller.h
+    )
+endif()
 
 if(ENABLE_SDL2)
     target_sources(input_common PRIVATE
