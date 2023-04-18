@@ -53,8 +53,7 @@ class FileSelectorTableViewController: UITableViewController {
         let emulatorVC = EmulatorViewController()
         emulatorVC.emulator.useJIT = Emulator.checkJITIsAvailable()
         emulatorVC.emulator.executableURL = url
-        emulatorVC.modalPresentationStyle = .fullScreen
-        present(emulatorVC, animated: true)
+        view.window?.rootViewController = emulatorVC
     }
 
     /*

@@ -1,9 +1,13 @@
 add_executable(citra_ios
     AppDelegate.swift
+    Bridge.h
     FileSelectorTableViewController.swift
     EmulatorViewController.swift
     Emulator.h
     Emulator.mm
+    EmulatorInput.swift
+    InputBridge.h
+    InputBridge.mm
 )
 
 create_target_directory_groups(citra_ios)

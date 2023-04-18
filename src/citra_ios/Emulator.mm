@@ -1,4 +1,7 @@
 #import "Emulator.h"
+#import "citra_ios-Swift.h"
+#import <Foundation/Foundation.h>
+#import "InputBridge.h"
 
 #include "core/core.h"
 #include "core/frontend/emu_window.h"
@@ -31,6 +34,68 @@ protected:
         printf("TODO: PollEvents %d %d\n", width, height);
         UpdateCurrentFramebufferLayout(width, height, true);
     }
+};
+
+class EmuButtonFactory : public Input::Factory<Input::ButtonDevice> {
+    std::unique_ptr<Input::ButtonDevice> Create(const Common::ParamPackage& params) override {
+        int button_id = params.Get("code", 0);
+        printf("GET BUTTON ID %d\n", button_id);
+        ButtonInputBridge* emuInput = nullptr;
+        switch ((Settings::NativeButton::Values)button_id) {
+            case Settings::NativeButton::A:
+                emuInput = EmulatorInput.buttonA;
+                break;
+            case Settings::NativeButton::B:
+                emuInput = EmulatorInput.buttonB;
+                break;
+            case Settings::NativeButton::X:
+                emuInput = EmulatorInput.buttonX;
+                break;
+            case Settings::NativeButton::Y:
+                emuInput = EmulatorInput.buttonY;
+                break;
+            case Settings::NativeButton::Up:
+                emuInput = EmulatorInput.dpadUp;
+                break;
+            case Settings::NativeButton::Down:
+                emuInput = EmulatorInput.dpadDown;
+                break;
+            case Settings::NativeButton::Left:
+                emuInput = EmulatorInput.dpadLeft;
+                break;
+            case Settings::NativeButton::Right:
+                emuInput = EmulatorInput.dpadRight;
+                break;
+            case Settings::NativeButton::L:
+                emuInput = EmulatorInput.buttonL;
+                break;
+            case Settings::NativeButton::R:
+                emuInput = EmulatorInput.buttonR;
+                break;
+            case Settings::NativeButton::Start:
+                emuInput = EmulatorInput.buttonStart;
+                break;
+            case Settings::NativeButton::Select:
+                emuInput = EmulatorInput.buttonSelect;
+                break;
+            case Settings::NativeButton::ZL:
+                emuInput = EmulatorInput.buttonZL;
+                break;
+            case Settings::NativeButton::ZR:
+                emuInput = EmulatorInput.buttonZR;
+                break;
+            case Settings::NativeButton::Debug:
+            case Settings::NativeButton::Gpio14:
+            case Settings::NativeButton::Home:
+            case Settings::NativeButton::NumButtons:
+                emuInput = EmulatorInput._buttonDummy;
+        }
+        if (emuInput == nullptr) {
+            return {};
+        }
+        InputBridge<bool>* ib = [emuInput getCppBridge];
+        return std::unique_ptr<InputBridge<bool>>(ib);
+    };
 };
 
 @implementation Emulator {
@@ -74,7 +139,7 @@ protected:
     Log::Filter log_filter(Log::Level::Info);
 //    log_filter.ParseFilterString("*:Debug");
     Log::SetGlobalFilter(log_filter);
-    Log::AddBackend(std::make_unique<Log::ConsoleBackend>());
+   Log::AddBackend(std::make_unique<Log::ConsoleBackend>());
 
     // set some settings
     Settings::values.graphics_api.SetValue(Settings::GraphicsAPI::Vulkan);
@@ -82,8 +147,18 @@ protected:
     for (const auto& service_module : Service::service_module_map) {
         Settings::values.lle_modules.emplace(service_module.name, false /* Always use HLE */);
     }
+    // controls
+    for (int i = 0; i < Settings::NativeButton::NumButtons; i++) {
+        Common::ParamPackage param{
+            {"engine", "ios_gamepad"},
+            {"code", std::to_string(i)},
+        };
+        Settings::values.current_input_profile.buttons[i] = param.Serialize();
+    }
     Settings::Apply();
     Settings::LogSettings();
+
+    Input::RegisterFactory<Input::ButtonDevice>("ios_gamepad", std::make_shared<EmuButtonFactory>());
 
     Core::System& system{Core::System::GetInstance()};
 
@@ -104,7 +179,7 @@ protected:
         } else {
             LOG_ERROR(Frontend, "Error in main run loop: {}", result, system.GetStatusDetails());
 //            NSLog(@"???");
-//            break;
+            break;
         }
     }
 }
