@@ -18,8 +18,13 @@ public:
         // TODO: iOS is not macOS so we should use like "AppleOS" or "Metal"
         // but it works though
         window_info.type = Frontend::WindowSystemType::MacOS;
-        window_info.render_surface = metalLayer;
+        window_info.render_surface = (void*)CFBridgingRetain(metalLayer);
         // window_info.render_surface_scale = 2.0f; // it seems anyone dont care it
+    }
+    ~EmuWindow_IOS() {
+        if (window_info.render_surface != nullptr) {
+            CFBridgingRelease(window_info.render_surface);
+        }
     }
 protected:
     void PollEvents() {
