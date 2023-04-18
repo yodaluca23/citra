@@ -29,11 +29,12 @@ public:
 protected:
     void PollEvents() {
         printf("TODO: PollEvents %d %d\n", width, height);
-        UpdateCurrentFramebufferLayout(width*2, height*2, true);
+        UpdateCurrentFramebufferLayout(width, height, true);
     }
 };
 
 @implementation Emulator {
+    __weak CAMetalLayer* _metalLayer;
     EmuWindow_IOS* _emuWindow;
     NSThread* _thread;
 }
@@ -51,6 +52,7 @@ protected:
 
 - (nonnull id)initWithMetalLayer:(nonnull CAMetalLayer *)metalLayer {
     if (self = [super init]) {
+        _metalLayer = metalLayer;
         _emuWindow = new EmuWindow_IOS();
         _emuWindow->InitWithMetalLayer(metalLayer);
         _thread = [NSThread.alloc initWithTarget:self selector:@selector(_startEmulator) object:nil];
@@ -62,6 +64,7 @@ protected:
 }
 
 - (void)startEmulator {
+    [self layerWasResized];
     [_thread start];
 }
 
@@ -104,6 +107,11 @@ protected:
 //            break;
         }
     }
+}
+
+- (void)layerWasResized {
+    _emuWindow->width = _metalLayer.bounds.size.width * UIScreen.mainScreen.scale;
+    _emuWindow->height = _metalLayer.bounds.size.height * UIScreen.mainScreen.scale;
 }
 
 @end

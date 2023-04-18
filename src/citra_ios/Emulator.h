@@ -8,4 +8,5 @@
 + (BOOL)checkJITIsAvailable;
 - (nonnull id)initWithMetalLayer:(nonnull CAMetalLayer*)metalLayer;
 - (void)startEmulator;
+- (void)layerWasResized;
 @end
