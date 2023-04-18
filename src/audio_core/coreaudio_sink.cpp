@@ -1,7 +1,7 @@
 // highly based on dolphin-ios's implementation https://github.com/OatmealDome/dolphin-ios/blob/a2485b9309db3cf14f8c5683a3f4d64476883eda/Source/Core/AudioCommon/CoreAudioSoundStream.cpp
 // which is licensed under GPL-2.0-or-later, Copyright 2008 Dolphin Emulator Project
-#include "audio_core/audio_types.h"
 #include "audio_core/coreaudio_sink.h"
+#include "audio_core/audio_types.h"
 #include "common/logging/log.h"
 
 namespace AudioCore {
