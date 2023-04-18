@@ -31,7 +31,8 @@ public:
     }
 protected:
     void PollEvents() {
-        printf("TODO: PollEvents %d %d\n", width, height);
+        // please dont spam it
+        // printf("TODO: PollEvents %d %d\n", width, height);
         UpdateCurrentFramebufferLayout(width, height, true);
     }
 };
