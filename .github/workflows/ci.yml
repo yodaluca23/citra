@@ -191,7 +191,7 @@ jobs:
           BUNDLE_IDENTIFIER: net.rinsuki.slapps.citra.ci-artifact
           MOLTENVK_IOS_ARTIFACT: "${{ github.workspace }}/build/dependencies/Package/Release/MoltenVK"
           CITRA_IOS_NAME_SUFFIX: " (CI)"
-          CITRA_IOS_SHORT_VERSION: "0.1.gha.${{ github.run_number }}.${{ matrix.configuration }}.${{ github.sha }}"
+          CITRA_IOS_SHORT_VERSION: ".gha.${{ github.run_number }}.${{ matrix.configuration }}.${{ github.sha }}"
       - name: Upload
         uses: actions/upload-artifact@v3
         with:
