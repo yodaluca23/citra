@@ -16,7 +16,7 @@
 #endif
 #ifdef __APPLE__
 #include <TargetConditionals.h>
-#ifdef TARGET_OS_IPHONE
+#if TARGET_OS_IPHONE
 #include "audio_core/coreaudio_sink.h"
 #endif
 #endif
@@ -52,7 +52,7 @@ constexpr SinkDetails sink_details[] = {
                 },
                 &ListSDL2SinkDevices},
 #endif
-#ifdef TARGET_OS_IPHONE
+#if TARGET_OS_IPHONE
     SinkDetails{"coreaudio",
                 [](std::string_view device_id) -> std::unique_ptr<Sink> {
                     return std::make_unique<CoreAudioSink>(std::string(device_id));

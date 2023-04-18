@@ -18,7 +18,7 @@
 
 namespace Vulkan {
 
-#ifdef TARGET_OS_IPHONE
+#if TARGET_OS_IPHONE
 vk::DynamicLoader Instance::dl("libMoltenVK.dylib");
 #else
 vk::DynamicLoader Instance::dl;
