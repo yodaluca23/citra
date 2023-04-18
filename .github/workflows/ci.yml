@@ -182,8 +182,8 @@ jobs:
           mkdir -p ipa/Payload
           cp -cr citra_ios.app ./ipa/Payload/citra_ios.app
           cd ipa
-          codesign -f -s - ./citra_ios.app/Frameworks/*
-          codesign -f -s - --entitlements ${{ github.workspace }}/src/citra_ios/resources/entitlements.plist ./citra_ios.app
+          codesign -f -s - ./Payload/citra_ios.app/Frameworks/*
+          codesign -f -s - --entitlements ${{ github.workspace }}/src/citra_ios/resources/entitlements.plist ./Payload/citra_ios.app
           mkdir -p ${{ github.workspace }}/artifacts
           zip -r ${{ github.workspace }}/artifacts/citra_ios_ci_${{ github.run_number }}_${{ matrix.configuration }}_${{ github.sha }}.ipa .
         env:
