@@ -14,6 +14,12 @@
 #ifdef HAVE_CUBEB
 #include "audio_core/cubeb_sink.h"
 #endif
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#ifdef TARGET_OS_IPHONE
+#include "audio_core/coreaudio_sink.h"
+#endif
+#endif
 #include "common/logging/log.h"
 
 namespace AudioCore {
@@ -45,6 +51,13 @@ constexpr SinkDetails sink_details[] = {
                     return std::make_unique<SDL2Sink>(std::string(device_id));
                 },
                 &ListSDL2SinkDevices},
+#endif
+#ifdef TARGET_OS_IPHONE
+    SinkDetails{"coreaudio",
+                [](std::string_view device_id) -> std::unique_ptr<Sink> {
+                    return std::make_unique<CoreAudioSink>(std::string(device_id));
+                },
+                &ListCoreAudioSinkDevices},
 #endif
     SinkDetails{"null",
                 [](std::string_view device_id) -> std::unique_ptr<Sink> {
