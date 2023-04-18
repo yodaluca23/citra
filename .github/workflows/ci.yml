@@ -190,8 +190,6 @@ jobs:
           MOLTENVK_IOS_ARTIFACT: "${{ github.workspace }}/Package/Release/MoltenVK"
           CITRA_IOS_NAME_SUFFIX: " (CI)"
           CITRA_IOS_SHORT_VERSION: "0.1.gha.${{ github.run_number }}.${{ matrix.configuration }}.${{ github.sha }}"
-      - name: Pack
-        run: ./.ci/macos/upload.sh
       - name: Upload
         uses: actions/upload-artifact@v3
         with:
