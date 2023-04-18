@@ -2,6 +2,8 @@
 
 #include <AudioUnit/AudioUnit.h>
 #include <cstddef>
+#include <string>
+#include <vector>
 
 #include "audio_core/sink.h"
 
