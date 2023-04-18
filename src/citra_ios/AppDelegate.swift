@@ -7,8 +7,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
         let window = UIWindow()
         self.window = window
+        let documentDir = try! FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+        try? FileManager.default.createDirectory(at: documentDir.appending(component: "Citra"), withIntermediateDirectories: true)
         window.rootViewController = UINavigationController(rootViewController: FileSelectorTableViewController(
-            at: try! FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+            at: documentDir
         ))
 
         window.makeKeyAndVisible()
