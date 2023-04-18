@@ -10,12 +10,19 @@
 #include "video_core/rasterizer_cache/custom_tex_manager.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_platform.h"
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
 
 #include <vk_mem_alloc.h>
 
 namespace Vulkan {
 
+#ifdef TARGET_OS_IPHONE
+vk::DynamicLoader Instance::dl("libMoltenVK.dylib");
+#else
 vk::DynamicLoader Instance::dl;
+#endif
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
