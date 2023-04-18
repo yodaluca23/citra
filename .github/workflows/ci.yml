@@ -150,6 +150,8 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
+      - name: Install dependencies
+        run: brew install glslang
       # Currently ccache is commented out since I don't know how to use it with Xcode + CMake
       # - name: Set up cache
       #   uses: actions/cache@v3
