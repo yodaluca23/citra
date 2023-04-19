@@ -1,0 +1,93 @@
+name: citra-ci
+
+on:
+  push:
+    branches: [ "*" ]
+    tags: [ "*" ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-latest
+    container: 
+      image: citraemu/build-environments:linux-clang-format
+      options: -u 1001
+    steps:
+      - uses: actions/checkout@v3
+        with: 
+          fetch-depth: 0
+      - name: Build
+        env:
+          COMMIT_RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
+        run: ./.ci/linux-clang-format/docker.sh
+  source:
+    if: ${{ !github.head_ref }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Pack
+        run: ./.ci/source/build.sh
+      - name: Upload
+        uses: actions/upload-artifact@v3
+        with:
+          name: source
+          path: artifacts/
+  ios:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        configuration: ["Release", "RelWithDebInfo"]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Install dependencies
+        run: brew install glslang
+      # Currently ccache is commented out since I don't know how to use it with Xcode + CMake
+      # - name: Set up cache
+      #   uses: actions/cache@v3
+      #   with:
+      #     path: ~/Library/Caches/ccache
+      #     key: ${{ runner.os }}-macos-${{ matrix.arch }}-${{ github.sha }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-macos-${{ matrix.arch }}-
+      - name: Query tag name
+        uses: little-core-labs/get-git-tag@v3.0.2
+        id: tagName
+      - name: Download MoltenVK
+        run: |
+          mkdir -p build/dependencies
+          cd build/dependencies
+          # https://github.com/KhronosGroup/MoltenVK/actions/runs/4496704187
+          # TODO: we should not to depend nightly.link, use GH actions token instead
+          # If this link was dead, i have a archive: https://web.archive.org/web/20230418172358/https://nightly.link/KhronosGroup/MoltenVK/suites/11749022866/artifacts/612167163
+          # but most good choice is take from latest release's artifact https://github.com/KhronosGroup/MoltenVK/releases
+          curl -Lo ios.zip https://nightly.link/KhronosGroup/MoltenVK/suites/11749022866/artifacts/612167163
+          unzip ios.zip
+          tar xf ios.tar
+      - name: Build
+        run: |
+          ./build_ios.sh
+          xcodebuild -configuration "${{ matrix.configuration }}" -scheme citra_ios -project build/ios/citra.xcodeproj CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          cd build/ios/bin/"${{ matrix.configuration }}"
+          mkdir -p ipa/Payload
+          cp -cr citra_ios.app ./ipa/Payload/citra_ios.app
+          cd ipa
+          codesign -f -s - ./Payload/citra_ios.app/Frameworks/*
+          codesign -f -s - --entitlements ${{ github.workspace }}/src/citra_ios/resources/entitlements.plist ./Payload/citra_ios.app
+          mkdir -p ${{ github.workspace }}/artifacts
+          zip -r ${{ github.workspace }}/artifacts/citra_ios_ci_${{ github.run_number }}_${{ matrix.configuration }}_${{ github.sha }}.ipa .
+        env:
+          DEVELOPMENT_TEAM_ID: "-"
+          BUNDLE_IDENTIFIER: net.rinsuki.slapps.citra.ci-artifact
+          MOLTENVK_IOS_ARTIFACT: "${{ github.workspace }}/build/dependencies/Package/Release/MoltenVK"
+          CITRA_IOS_NAME_SUFFIX: " (CI)"
+          CITRA_IOS_SHORT_VERSION: ".gha.${{ github.run_number }}.${{ matrix.configuration }}.${{ github.sha }}"
+      - name: Upload
+        uses: actions/upload-artifact@v3
+        with:
+          name: ios-${{ matrix.configuration }}
+          path: artifacts/
