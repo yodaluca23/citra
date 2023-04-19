@@ -6,7 +6,7 @@ class EmulatorViewController: UIViewController {
     let mtkView: MTKView
     let metalLayer: CAMetalLayer
     let emulator: Emulator
-    var virtualController: GCVirtualController?
+    var virtualController: Any?
 
     init() {
         mtkView = .init()
@@ -39,20 +39,23 @@ class EmulatorViewController: UIViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            let virtualControllerConfiguration = GCVirtualController.Configuration()
-            virtualControllerConfiguration.elements = [
-                GCInputButtonA,
-                GCInputButtonB,
-                GCInputButtonX,
-                GCInputButtonY,
-                GCInputDirectionPad,
-                GCInputLeftShoulder,
-                GCInputRightShoulder,
-            ]
-            self.virtualController = GCVirtualController(configuration: virtualControllerConfiguration)
-            self.virtualController?.connect { error in
-                print("Virtual Controller", error)
+        if #available(iOS 15.0, *) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                let virtualControllerConfiguration = GCVirtualController.Configuration()
+                virtualControllerConfiguration.elements = [
+                    GCInputButtonA,
+                    GCInputButtonB,
+                    GCInputButtonX,
+                    GCInputButtonY,
+                    GCInputDirectionPad,
+                    GCInputLeftShoulder,
+                    GCInputRightShoulder,
+                ]
+                let virtualController = GCVirtualController(configuration: virtualControllerConfiguration)
+                virtualController.connect { error in
+                    print("Virtual Controller", error)
+                }
+                self.virtualController = virtualController
             }
         }
         emulator.start()
