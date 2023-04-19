@@ -99,6 +99,30 @@ class EmuButtonFactory : public Input::Factory<Input::ButtonDevice> {
     };
 };
 
+class EmuAnalogFactory : public Input::Factory<Input::AnalogDevice> {
+    std::unique_ptr<Input::AnalogDevice> Create(const Common::ParamPackage& params) override {
+        int button_id = params.Get("code", 0);
+        printf("GET ANALOG ID %d\n", button_id);
+        StickInputBridge* emuInput = nullptr;
+        switch ((Settings::NativeAnalog::Values)button_id) {
+            case Settings::NativeAnalog::CirclePad:
+                emuInput = EmulatorInput.circlePad;
+                break;
+            case Settings::NativeAnalog::CStick:
+                emuInput = EmulatorInput.circlePadPro;
+                break;
+            case Settings::NativeAnalog::NumAnalogs:
+                UNREACHABLE();
+                break;
+        }
+        if (emuInput == nullptr) {
+            return {};
+        }
+        AnalogInputBridge* ib = [emuInput getCppBridge];
+        return std::unique_ptr<AnalogInputBridge>(ib);
+    };
+};
+
 @implementation Emulator {
     __weak CAMetalLayer* _metalLayer;
     EmuWindow_IOS* _emuWindow;
@@ -156,10 +180,18 @@ class EmuButtonFactory : public Input::Factory<Input::ButtonDevice> {
         };
         Settings::values.current_input_profile.buttons[i] = param.Serialize();
     }
+    for (int i = 0; i < Settings::NativeAnalog::NumAnalogs; i++) {
+        Common::ParamPackage param{
+            {"engine", "ios_gamepad"},
+            {"code", std::to_string(i)},
+        };
+        Settings::values.current_input_profile.analogs[i] = param.Serialize();
+    }
     Settings::Apply();
     Settings::LogSettings();
 
     Input::RegisterFactory<Input::ButtonDevice>("ios_gamepad", std::make_shared<EmuButtonFactory>());
+    Input::RegisterFactory<Input::AnalogDevice>("ios_gamepad", std::make_shared<EmuAnalogFactory>());
 
     Core::System& system{Core::System::GetInstance()};
 

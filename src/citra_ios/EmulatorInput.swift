@@ -15,5 +15,7 @@ import Foundation
     @objc static let dpadDown = ButtonInputBridge()
     @objc static let dpadLeft = ButtonInputBridge()
     @objc static let dpadRight = ButtonInputBridge()
+    @objc static let circlePad = StickInputBridge()
+    @objc static let circlePadPro = StickInputBridge()
     @objc static let _buttonDummy = ButtonInputBridge()
 }

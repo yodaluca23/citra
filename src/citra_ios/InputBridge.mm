@@ -17,3 +17,20 @@
     return _cppBridge;
 }
 @end
+
+@implementation StickInputBridge {
+    AnalogInputBridge* _cppBridge;
+}
+- (nonnull id)init {
+    if (self = [super init]) {
+        _cppBridge = new AnalogInputBridge(Float2D{0, 0});
+    }
+    return self;
+}
+- (void)valueChangedHandler:(nonnull GCControllerDirectionPad*)input x:(float)xValue y:(float)yValue {
+    _cppBridge->current_value.exchange(Float2D{xValue, yValue});
+}
+- (AnalogInputBridge*)getCppBridge {
+    return _cppBridge;
+}
+@end

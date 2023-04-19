@@ -1,3 +1,8 @@
+struct Float2D {
+    float x;
+    float y;
+};
+
 #ifdef __cplusplus
 #include "core/frontend/input.h"
 
@@ -14,6 +19,20 @@ public:
         return current_value;
     }
 };
+
+class AnalogInputBridge : public Input::InputDevice<std::tuple<float, float>> {
+public:
+    std::atomic<Float2D> current_value;
+
+    AnalogInputBridge(Float2D initial_value) {
+        current_value = initial_value;
+    }
+
+    std::tuple<float, float> GetStatus() const {
+        Float2D cv = current_value.load();
+        return { cv.x, cv.y };
+    }
+};
 #endif
 
 #ifdef __OBJC__
@@ -27,4 +46,14 @@ public:
 -(InputBridge<bool>*)getCppBridge;
 #endif
 @end
+
+
+@interface StickInputBridge: NSObject
+-(nonnull id)init;
+-(void)valueChangedHandler:(nonnull GCControllerDirectionPad*)input x:(float)xValue y:(float)yValue;
+#ifdef __cplusplus
+-(AnalogInputBridge*)getCppBridge;
+#endif
+@end
+
 #endif

@@ -76,6 +76,9 @@ class EmulatorViewController: UIViewController {
             gamepad.dpad.down.valueChangedHandler = EmulatorInput.dpadDown.valueChangedHandler
             gamepad.dpad.left.valueChangedHandler = EmulatorInput.dpadLeft.valueChangedHandler
             gamepad.dpad.right.valueChangedHandler = EmulatorInput.dpadRight.valueChangedHandler
+            gamepad.buttonMenu.valueChangedHandler = EmulatorInput.buttonStart.valueChangedHandler
+            gamepad.leftThumbstick.valueChangedHandler = EmulatorInput.circlePad.valueChangedHandler
+            gamepad.rightThumbstick.valueChangedHandler = EmulatorInput.circlePadPro.valueChangedHandler
         }
     }
 }
