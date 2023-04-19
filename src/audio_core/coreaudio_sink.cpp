@@ -1,7 +1,8 @@
-// highly based on dolphin-ios's implementation https://github.com/OatmealDome/dolphin-ios/blob/a2485b9309db3cf14f8c5683a3f4d64476883eda/Source/Core/AudioCommon/CoreAudioSoundStream.cpp
+// highly based on dolphin-ios's implementation
+// https://github.com/OatmealDome/dolphin-ios/blob/a2485b9309db3cf14f8c5683a3f4d64476883eda/Source/Core/AudioCommon/CoreAudioSoundStream.cpp
 // which is licensed under GPL-2.0-or-later, Copyright 2008 Dolphin Emulator Project
-#include "audio_core/coreaudio_sink.h"
 #include "audio_core/audio_types.h"
+#include "audio_core/coreaudio_sink.h"
 #include "common/logging/log.h"
 
 namespace AudioCore {
@@ -27,17 +28,19 @@ CoreAudioSink::CoreAudioSink(std::string device_name) {
 
     AudioStreamBasicDescription format_desc;
     FillOutASBDForLPCM(format_desc, (Float64)native_sample_rate, 2, 16, 16, false, false);
-    err = AudioUnitSetProperty(audio_unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &format_desc, sizeof format_desc);
+    err = AudioUnitSetProperty(audio_unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input,
+                               0, &format_desc, sizeof format_desc);
     if (err != noErr) {
         LOG_CRITICAL(Audio_Sink, "Failed to set input property");
         return;
     }
 
-    AURenderCallbackStruct callback {
+    AURenderCallbackStruct callback{
         .inputProc = NativeCallback,
         .inputProcRefCon = this,
     };
-    err = AudioUnitSetProperty(audio_unit, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &callback, sizeof callback);
+    err = AudioUnitSetProperty(audio_unit, kAudioUnitProperty_SetRenderCallback,
+                               kAudioUnitScope_Input, 0, &callback, sizeof callback);
     if (err != noErr) {
         LOG_CRITICAL(Audio_Sink, "Failed to set render callback");
         return;
@@ -75,11 +78,14 @@ void CoreAudioSink::SetCallback(std::function<void(s16*, std::size_t)> cb) {
     this->cb = cb;
 }
 
-OSStatus CoreAudioSink::NativeCallback(void* ref_con, AudioUnitRenderActionFlags* action_flags, const AudioTimeStamp* timestamp, UInt32 bus_number, UInt32 number_frames, AudioBufferList* data) {
-    CoreAudioSink* cas = (CoreAudioSink*) ref_con;
-    if (cas->cb == nullptr) return noErr; // TODO: better error handling
+OSStatus CoreAudioSink::NativeCallback(void* ref_con, AudioUnitRenderActionFlags* action_flags,
+                                       const AudioTimeStamp* timestamp, UInt32 bus_number,
+                                       UInt32 number_frames, AudioBufferList* data) {
+    CoreAudioSink* cas = (CoreAudioSink*)ref_con;
+    if (cas->cb == nullptr)
+        return noErr; // TODO: better error handling
 
-    for (UInt32 i=0; i < data->mNumberBuffers; i++) {
+    for (UInt32 i = 0; i < data->mNumberBuffers; i++) {
         const AudioBuffer buffer = data->mBuffers[i];
         cas->cb(reinterpret_cast<s16*>(buffer.mData), buffer.mDataByteSize / 4);
     }
@@ -94,4 +100,4 @@ unsigned int CoreAudioSink::GetNativeSampleRate() const {
 std::vector<std::string> ListCoreAudioSinkDevices() {
     return {"auto"};
 }
-}
+} // namespace AudioCore

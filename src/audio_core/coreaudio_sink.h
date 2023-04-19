@@ -1,9 +1,9 @@
 #pragma once
 
-#include <AudioUnit/AudioUnit.h>
 #include <cstddef>
 #include <string>
 #include <vector>
+#include <AudioUnit/AudioUnit.h>
 
 #include "audio_core/sink.h"
 
@@ -22,9 +22,11 @@ private:
     AudioUnit audio_unit;
     std::function<void(s16*, std::size_t)> cb = nullptr;
 
-    static OSStatus NativeCallback(void* ref_con, AudioUnitRenderActionFlags* action_flags, const AudioTimeStamp* timestamp, UInt32 bus_number, UInt32 number_frames, AudioBufferList* data);
+    static OSStatus NativeCallback(void* ref_con, AudioUnitRenderActionFlags* action_flags,
+                                   const AudioTimeStamp* timestamp, UInt32 bus_number,
+                                   UInt32 number_frames, AudioBufferList* data);
 };
 
 std::vector<std::string> ListCoreAudioSinkDevices();
 
-}
+} // namespace AudioCore

@@ -30,7 +30,7 @@ public:
 
     std::tuple<float, float> GetStatus() const {
         Float2D cv = current_value.load();
-        return { cv.x, cv.y };
+        return {cv.x, cv.y};
     }
 };
 #endif
@@ -39,20 +39,23 @@ public:
 #import <Foundation/Foundation.h>
 #import <GameController/GameController.h>
 
-@interface ButtonInputBridge: NSObject
--(nonnull id)init;
--(void)valueChangedHandler:(nonnull GCControllerButtonInput*)input value:(float)value pressed:(BOOL)pressed;
+@interface ButtonInputBridge : NSObject
+- (nonnull id)init;
+- (void)valueChangedHandler:(nonnull GCControllerButtonInput*)input
+                      value:(float)value
+                    pressed:(BOOL)pressed;
 #ifdef __cplusplus
--(InputBridge<bool>*)getCppBridge;
+- (InputBridge<bool>*)getCppBridge;
 #endif
 @end
 
-
-@interface StickInputBridge: NSObject
--(nonnull id)init;
--(void)valueChangedHandler:(nonnull GCControllerDirectionPad*)input x:(float)xValue y:(float)yValue;
+@interface StickInputBridge : NSObject
+- (nonnull id)init;
+- (void)valueChangedHandler:(nonnull GCControllerDirectionPad*)input
+                          x:(float)xValue
+                          y:(float)yValue;
 #ifdef __cplusplus
--(AnalogInputBridge*)getCppBridge;
+- (AnalogInputBridge*)getCppBridge;
 #endif
 @end
 
