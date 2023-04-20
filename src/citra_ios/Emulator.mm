@@ -7,6 +7,7 @@
 #include "core/frontend/emu_window.h"
 #include "common/logging/backend.h"
 #include "common/logging/log.h"
+#include "core/hle/service/am/am.h"
 
 #define CS_OPS_STATUS 0
 #define CS_DEBUGGED 0x10000000
@@ -139,6 +140,23 @@ class EmuAnalogFactory : public Input::Factory<Input::AnalogDevice> {
     }
 
     return flags & CS_DEBUGGED;
+}
+
++ (InstallCIAResult)installCIA:(nonnull NSURL *)ciaURL {
+    std::string ciaPath(ciaURL.path.UTF8String);
+    Service::AM::InstallStatus install_status = Service::AM::InstallCIA(ciaPath);
+    switch (install_status) {
+        case Service::AM::InstallStatus::Success:
+            return InstallCIAResultSuccess;
+        case Service::AM::InstallStatus::ErrorInvalid:
+            return InstallCIAResultErrorInvalid;
+        case Service::AM::InstallStatus::ErrorEncrypted:
+            return InstallCIAResultErrorEncrypted;
+        case Service::AM::InstallStatus::ErrorFailedToOpenFile:
+        case Service::AM::InstallStatus::ErrorFileNotFound:
+        case Service::AM::InstallStatus::ErrorAborted:
+            return InstallCIAResultErrorUnknown;
+    }
 }
 
 - (nonnull id)initWithMetalLayer:(nonnull CAMetalLayer *)metalLayer viewController:(nonnull UIViewController*)viewController {

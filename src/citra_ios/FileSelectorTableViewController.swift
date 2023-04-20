@@ -50,6 +50,34 @@ class FileSelectorTableViewController: UITableViewController {
             show(FileSelectorTableViewController(at: url), sender: nil)
             return
         }
+        if url.lastPathComponent.lowercased().hasSuffix(".cia") {
+            // should install CIA instead of launch
+            let alert = UIAlertController(title: "Install CIA", message: "Do you want to install \(url.lastPathComponent)?", preferredStyle: .alert)
+            alert.addAction(.init(title: "Add", style: .default) { _ in
+                let alert = UIAlertController(title: "Failed to install CIA", message: "Do you want to delete \"\(url.lastPathComponent)\"? (currently you need to restart for apply changes)", preferredStyle: .alert)
+                switch Emulator.installCIA(url) {
+                case .success:
+                    alert.title = "Successfly Installed!"
+                    alert.addAction(.init(title: "Delete CIA & Quit", style: .destructive) { _ in
+                        try? FileManager.default.removeItem(at: url)
+                        exit(0)
+                    })
+                case .errorEncrypted:
+                    alert.message = "CIA is encrypted."
+                case .errorInvalid:
+                    alert.message = "Invalid file."
+                case .errorUnknown:
+                    alert.message = "Unknown error."
+                }
+                alert.addAction(.init(title: "Quit", style: .default) { _ in
+                    exit(0)
+                })
+                self.present(alert, animated: true)
+            })
+            alert.addAction(.init(title: "Cancel", style: .cancel, handler: nil))
+            present(alert, animated: true)
+            return
+        }
         let emulatorVC = EmulatorViewController()
         emulatorVC.emulator.executableURL = url
         emulatorVC.emulator.useJIT = Emulator.checkJITIsAvailable()
