@@ -5,13 +5,12 @@ import GameController
 class EmulatorViewController: UIViewController {
     let mtkView: MTKView
     let metalLayer: CAMetalLayer
-    let emulator: Emulator
+    lazy var emulator = Emulator(metalLayer: metalLayer, viewController: self)
     var virtualController: Any?
 
     init() {
         mtkView = .init()
         metalLayer = mtkView.layer as! CAMetalLayer
-        emulator = .init(metalLayer: metalLayer)
         super.init(nibName: nil, bundle: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(activeGameControllerWasChanged(notification:)), name: .GCControllerDidBecomeCurrent, object: nil)
     }

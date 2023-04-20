@@ -125,6 +125,7 @@ class EmuAnalogFactory : public Input::Factory<Input::AnalogDevice> {
 
 @implementation Emulator {
     __weak CAMetalLayer* _metalLayer;
+    __weak UIViewController* _viewController;
     EmuWindow_IOS* _emuWindow;
     NSThread* _thread;
 }
@@ -140,9 +141,10 @@ class EmuAnalogFactory : public Input::Factory<Input::AnalogDevice> {
     return flags & CS_DEBUGGED;
 }
 
-- (nonnull id)initWithMetalLayer:(nonnull CAMetalLayer *)metalLayer {
+- (nonnull id)initWithMetalLayer:(nonnull CAMetalLayer *)metalLayer viewController:(nonnull UIViewController*)viewController {
     if (self = [super init]) {
         _metalLayer = metalLayer;
+        _viewController = viewController;
         _emuWindow = new EmuWindow_IOS();
         _emuWindow->InitWithMetalLayer(metalLayer);
         _thread = [NSThread.alloc initWithTarget:self selector:@selector(_startEmulator) object:nil];
@@ -156,6 +158,16 @@ class EmuAnalogFactory : public Input::Factory<Input::AnalogDevice> {
 - (void)startEmulator {
     [self layerWasResized];
     [_thread start];
+}
+
+- (void)_showError:(NSString*)title description:(NSString*)description {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIAlertController* alert = [UIAlertController alertControllerWithTitle:title message:description preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"Quit" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            exit(0);
+        }]];
+        [_viewController presentViewController:alert animated:TRUE completion:nil];
+    });
 }
 
 - (void)_startEmulator {
@@ -199,6 +211,36 @@ class EmuAnalogFactory : public Input::Factory<Input::AnalogDevice> {
 
     if (load_result != Core::System::ResultStatus::Success) {
         NSLog(@"Failed to load");
+        NSString* desc = @"";
+        switch (load_result) {
+            case Core::System::ResultStatus::Success:
+                break;
+            case Core::System::ResultStatus::ErrorNotInitialized:
+                desc = @"Core is not initialized";
+                break;
+            case Core::System::ResultStatus::ErrorGetLoader:
+                desc = @"Failed to get loader";
+                break;
+            case Core::System::ResultStatus::ErrorSystemMode:
+                desc = @"Failed to determine system mode";
+                break;
+            case Core::System::ResultStatus::ErrorLoader:
+                desc = @"Failed to load ROM";
+                break;
+            case Core::System::ResultStatus::ErrorLoader_ErrorEncrypted:
+                desc = @"ROM is encrypted. you should put necessary files on Citra/sysdata, or re-dump as decrypted ROM";
+                break;
+            case Core::System::ResultStatus::ErrorLoader_ErrorInvalidFormat:
+                desc = @"This ROM format is not supported.";
+                break;
+            case Core::System::ResultStatus::ErrorLoader_ErrorGbaTitle:
+                desc = @"GBA VC is not supported. Please extract GBA ROM from it and use with GBA emulators instead.";
+                break;
+            default:
+                desc = @"Unknown error was occured";
+                break;
+        }
+        [self _showError:@"Failed to load ROM" description:desc];
         return;
     }
 

@@ -6,7 +6,7 @@
 @property(atomic, copy) NSURL* executableURL;
 
 + (BOOL)checkJITIsAvailable;
-- (nonnull id)initWithMetalLayer:(nonnull CAMetalLayer*)metalLayer;
+- (nonnull id)initWithMetalLayer:(nonnull CAMetalLayer*)metalLayer viewController:(nonnull UIViewController*)viewController;
 - (void)startEmulator;
 - (void)layerWasResized;
 @end
