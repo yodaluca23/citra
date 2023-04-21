@@ -8,6 +8,7 @@ add_executable(citra_ios
     EmulatorInput.swift
     InputBridge.h
     InputBridge.mm
+    TopViewController.swift
 )
 
 create_target_directory_groups(citra_ios)

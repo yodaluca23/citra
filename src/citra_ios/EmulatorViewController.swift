@@ -19,6 +19,22 @@ class EmulatorViewController: UIViewController {
         fatalError("init(coder:) has not been implemented")
     }
 
+    func start(parent: UIViewController) {
+        emulator.useJIT = Emulator.checkJITIsAvailable()
+        if !emulator.useJIT {
+            let alertController = UIAlertController(title: "Debugger is not attached", message: "You probably want to use JIT for stable fps and energy efficiency, but debugger is not attached.\n\nCurrently any integration about device-only JIT solution (like AltKit) is not introduced, so you need to manually launch citra_ios with AltStore's \"Enable JIT\" option or attach from Xcode or something else BEFORE launch game.\n\nBy the way, you can play games without JIT, but its may not run at full speed (especially OLD devices).", preferredStyle: .alert)
+            alertController.addAction(.init(title: "Launch without JIT (SLOW), anyway", style: .destructive) { _ in
+                parent.view.window?.rootViewController = self
+            })
+            alertController.addAction(.init(title: "Cancel", style: .cancel) { _ in
+
+            })
+            parent.present(alertController, animated: true)
+            return
+        }
+        parent.view.window?.rootViewController = self
+    }
+
     override func loadView() {
         view = UIView()
         view.backgroundColor = .black

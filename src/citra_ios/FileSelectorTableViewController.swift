@@ -80,19 +80,7 @@ class FileSelectorTableViewController: UITableViewController {
         }
         let emulatorVC = EmulatorViewController()
         emulatorVC.emulator.executableURL = url
-        emulatorVC.emulator.useJIT = Emulator.checkJITIsAvailable()
-        if !emulatorVC.emulator.useJIT {
-            let alertController = UIAlertController(title: "Debugger is not attached", message: "You probably want to use JIT for stable fps and energy efficiency, but debugger is not attached.\n\nCurrently any integration about device-only JIT solution (like AltKit) is not introduced, so you need to manually launch citra_ios with AltStore's \"Enable JIT\" option or attach from Xcode or something else BEFORE launch game.\n\nBy the way, you can play games without JIT, but its may not run at full speed (especially OLD devices).", preferredStyle: .alert)
-            alertController.addAction(.init(title: "Launch without JIT (SLOW), anyway", style: .destructive) { _ in
-                self.view.window?.rootViewController = emulatorVC
-            })
-            alertController.addAction(.init(title: "Cancel", style: .cancel) { _ in
-
-            })
-            present(alertController, animated: true)
-            return
-        }
-        view.window?.rootViewController = emulatorVC
+        emulatorVC.start(parent: self)
     }
 
     /*

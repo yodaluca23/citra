@@ -1,6 +1,7 @@
 #import "Emulator.h"
 #import "citra_ios-Swift.h"
 #import <Foundation/Foundation.h>
+#import <Accelerate/Accelerate.h>
 #import "InputBridge.h"
 
 #include "core/core.h"
@@ -8,6 +9,8 @@
 #include "common/logging/backend.h"
 #include "common/logging/log.h"
 #include "core/hle/service/am/am.h"
+#include "core/loader/smdh.h"
+#include "core/hw/aes/key.h"
 
 #define CS_OPS_STATUS 0
 #define CS_DEBUGGED 0x10000000
@@ -157,6 +160,73 @@ class EmuAnalogFactory : public Input::Factory<Input::AnalogDevice> {
         case Service::AM::InstallStatus::ErrorAborted:
             return InstallCIAResultErrorUnknown;
     }
+}
+
++ (NSData*)getSMDH:(NSURL *)appURL {
+    // taking from citra_qt/game_list_worker.cpp
+
+    std::string appPath(appURL.path.UTF8String);
+    std::unique_ptr<Loader::AppLoader> loader = Loader::GetLoader(appPath);
+    if (!loader) return nil;
+
+    bool executable = false;
+    const auto res = loader->IsExecutable(executable);
+    if (!executable && res != Loader::ResultStatus::ErrorEncrypted) return nil;
+
+    u64 programID = 0;
+    loader->ReadProgramId(programID);
+
+    u64 extdataID = 0;
+    loader->ReadExtdataId(extdataID);
+
+    std::vector<u8> smdh;
+    if (!(programID & ~0x00040000FFFFFFFF)) {
+        std::string update_path = Service::AM::GetTitleContentPath(Service::FS::MediaType::SDMC, programID | 0x0000000E00000000);
+        if (FileUtil::Exists(update_path)) {
+            std::unique_ptr<Loader::AppLoader> update_loader = Loader::GetLoader(update_path);
+            if (update_loader) {
+                update_loader->ReadIcon(smdh);
+            }
+        }
+    }
+
+    if (!Loader::IsValidSMDH(smdh)) loader->ReadIcon(smdh);
+    if (!Loader::IsValidSMDH(smdh)) return nil;
+
+    return [NSData.alloc initWithBytes:smdh.data() length:smdh.size()];
+}
+
++(UIImage*)getIcon:(NSData*)smdh large:(BOOL)large {
+    Loader::SMDH* smdhData = (Loader::SMDH*)smdh.bytes;
+    std::vector<u16> iconData = smdhData->GetIcon(large);
+    // convert to RGBA8888 with vImage
+    int size = large ? 48 : 24;
+    u32* iconDataRGBA = new u32[size * size];
+
+    vImage_Buffer src;
+    src.data = iconData.data();
+    src.width = size;
+    src.height = size;
+    src.rowBytes = size * sizeof(u16);
+
+    vImage_Buffer dest;
+    dest.data = iconDataRGBA;
+    dest.width = size;
+    dest.height = size;
+    dest.rowBytes = size * sizeof(u32);
+
+    vImageConvert_RGB565toBGRA8888(255, &src, &dest, 0);
+
+    // create CGImage
+    CGDataProviderRef provider = CGDataProviderCreateWithData(NULL, iconDataRGBA, size * size * sizeof(u32), [](void *info, const void *data, size_t size) {
+        delete[] (u32*)data;
+    });
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGImageRef image = CGImageCreate(size, size, 8, 32, size * sizeof(u32), colorSpace, kCGBitmapByteOrder32Little | kCGImageAlphaPremultipliedFirst, provider, NULL, false, kCGRenderingIntentDefault);
+    CGDataProviderRelease(provider);
+    CGColorSpaceRelease(colorSpace);
+
+    return [UIImage.alloc initWithCGImage:image];
 }
 
 - (nonnull id)initWithMetalLayer:(nonnull CAMetalLayer *)metalLayer viewController:(nonnull UIViewController*)viewController {

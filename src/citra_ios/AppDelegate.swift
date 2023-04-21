@@ -9,9 +9,20 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         self.window = window
         let documentDir = try! FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
         try? FileManager.default.createDirectory(at: documentDir.appendingPathComponent("Citra"), withIntermediateDirectories: true)
-        window.rootViewController = UINavigationController(rootViewController: FileSelectorTableViewController(
-            at: documentDir
-        ))
+
+        let vc = UITabBarController()
+        let fileSelectorVC = UINavigationController(rootViewController: FileSelectorTableViewController(at: documentDir))
+        fileSelectorVC.tabBarItem.image = UIImage(systemName: "folder")
+        fileSelectorVC.tabBarItem.title = "Files"
+        let topVC = UINavigationController(rootViewController: TopViewController())
+        topVC.tabBarItem.image = UIImage(systemName: "square.grid.3x3.fill")
+        topVC.tabBarItem.title = "Installed Titles"
+        vc.setViewControllers([
+            fileSelectorVC,
+            topVC,
+        ], animated: false)
+
+        window.rootViewController = vc
 
         window.makeKeyAndVisible()
 
