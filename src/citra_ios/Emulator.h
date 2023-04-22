@@ -1,6 +1,6 @@
+#import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 #import <MetalKit/MetalKit.h>
-#import <CoreGraphics/CoreGraphics.h>
 
 typedef NS_ENUM(NSInteger, InstallCIAResult) {
     InstallCIAResultSuccess,
@@ -15,9 +15,10 @@ typedef NS_ENUM(NSInteger, InstallCIAResult) {
 
 + (BOOL)checkJITIsAvailable;
 + (InstallCIAResult)installCIA:(nonnull NSURL*)ciaURL;
-+ (NSData*)getSMDH:(NSURL *)appURL;
-+ (UIImage*)getIcon:(nonnull NSData *)smdh large:(BOOL)large;
-- (nonnull id)initWithMetalLayer:(nonnull CAMetalLayer*)metalLayer viewController:(nonnull UIViewController*)viewController;
++ (NSData*)getSMDH:(NSURL*)appURL;
++ (UIImage*)getIcon:(nonnull NSData*)smdh large:(BOOL)large;
+- (nonnull id)initWithMetalLayer:(nonnull CAMetalLayer*)metalLayer
+                  viewController:(nonnull UIViewController*)viewController;
 - (void)startEmulator;
 - (void)layerWasResized;
 @end
