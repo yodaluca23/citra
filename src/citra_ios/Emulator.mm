@@ -215,14 +215,14 @@ class EmuAnalogFactory : public Input::Factory<Input::AnalogDevice> {
     dest.height = size;
     dest.rowBytes = size * sizeof(u32);
 
-    vImageConvert_RGB565toBGRA8888(255, &src, &dest, 0);
+    vImageConvert_RGB565toARGB8888(255, &src, &dest, 0);
 
     // create CGImage
     CGDataProviderRef provider = CGDataProviderCreateWithData(NULL, iconDataRGBA, size * size * sizeof(u32), [](void *info, const void *data, size_t size) {
         delete[] (u32*)data;
     });
     CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-    CGImageRef image = CGImageCreate(size, size, 8, 32, size * sizeof(u32), colorSpace, kCGBitmapByteOrder32Little | kCGImageAlphaPremultipliedFirst, provider, NULL, false, kCGRenderingIntentDefault);
+    CGImageRef image = CGImageCreate(size, size, 8, 32, size * sizeof(u32), colorSpace, kCGBitmapByteOrder32Big | kCGImageAlphaPremultipliedFirst, provider, NULL, false, kCGRenderingIntentDefault);
     CGDataProviderRelease(provider);
     CGColorSpaceRelease(colorSpace);
 
