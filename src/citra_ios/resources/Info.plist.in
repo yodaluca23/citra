@@ -49,5 +49,10 @@
             <string>ExtendedGamepad</string>
         </dict>
     </array>
+    <key>UIRequiredDeviceCapabilities</key>
+    <array>
+        <!-- We need layered rendering (which is supported in Apple5 GPU family (=A12) or later) -->
+        <string>iphone-ipad-minimum-performance-a12</string>
+    </array>
 </dict>
 </plist>
