@@ -86,6 +86,7 @@ jobs:
           MOLTENVK_IOS_ARTIFACT: "${{ github.workspace }}/build/dependencies/Package/Release/MoltenVK"
           CITRA_IOS_NAME_SUFFIX: " (CI)"
           CITRA_IOS_SHORT_VERSION: ".gha.${{ github.run_id }}.${{ matrix.configuration }}.${{ github.sha }}"
+          ENABLE_LTO: "yes"
       - name: Upload
         uses: actions/upload-artifact@v3
         with:
