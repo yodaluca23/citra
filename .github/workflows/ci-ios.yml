@@ -79,15 +79,63 @@ jobs:
           codesign -f -s - ./Payload/citra_ios.app/Frameworks/*
           codesign -f -s - --entitlements ${{ github.workspace }}/src/citra_ios/resources/entitlements.plist ./Payload/citra_ios.app
           mkdir -p ${{ github.workspace }}/artifacts
-          zip -r ${{ github.workspace }}/artifacts/citra_ios_ci_${{ github.run_number }}_${{ matrix.configuration }}_${{ github.sha }}.ipa .
+          zip -r ${{ github.workspace }}/artifacts/citra_ios_ci_${{ github.run_id }}_${{ matrix.configuration }}_${{ github.sha }}.ipa .
         env:
           DEVELOPMENT_TEAM_ID: "-"
           BUNDLE_IDENTIFIER: net.rinsuki.slapps.citra.ci-artifact
           MOLTENVK_IOS_ARTIFACT: "${{ github.workspace }}/build/dependencies/Package/Release/MoltenVK"
           CITRA_IOS_NAME_SUFFIX: " (CI)"
-          CITRA_IOS_SHORT_VERSION: ".gha.${{ github.run_number }}.${{ matrix.configuration }}.${{ github.sha }}"
+          CITRA_IOS_SHORT_VERSION: ".gha.${{ github.run_id }}.${{ matrix.configuration }}.${{ github.sha }}"
       - name: Upload
         uses: actions/upload-artifact@v3
         with:
           name: ios-${{ matrix.configuration }}
           path: artifacts/
+  release_alpha:
+    runs-on: macos-latest
+    if: ${{ github.ref == 'refs/heads/ios_frontend' && github.event_name == 'push' }}
+    needs:
+    - ios
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Download Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: ios-Release
+          path: artifacts
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ios/alpha/${{ github.run_id }}
+          release_name: "iOS (α) CI.${{ github.run_id }}"
+          body: |
+            ## NOTE
+            * This version requires A12 or later device (iPhone XS/XR or later)
+              * this is coming from GPU requirements (we need layered rendering)
+            * This version can install to iOS 14 or later device, but...
+              * We only supports latest stable iOS.
+              * in iOS 14.x or older, you can't use virtual controller (which means you need to use external controller, like DS4 or Xbox or MFi certificated controller)
+            * This version doesn't supporting these features:
+              * Audio Input (Mic)
+              * Camera
+              * Motion Sensor
+              * Touch Screen
+              * NFC
+              * SELECT/HOME button for physical controller
+              * Circle Pad (including Pro), ZL/ZR, SELECT/START/HOME button for virtual controller
+          draft: true
+          prerelease: true
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/citra_ios_ci_${{ github.run_id }}_Release_${{ github.sha }}.ipa
+          asset_name: citra_ios_ci_${{ github.run_id }}_Release_${{ github.sha }}.ipa
+          asset_content_type: application/octet-stream

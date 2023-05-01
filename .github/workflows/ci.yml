@@ -185,13 +185,13 @@ jobs:
           codesign -f -s - ./Payload/citra_ios.app/Frameworks/*
           codesign -f -s - --entitlements ${{ github.workspace }}/src/citra_ios/resources/entitlements.plist ./Payload/citra_ios.app
           mkdir -p ${{ github.workspace }}/artifacts
-          zip -r ${{ github.workspace }}/artifacts/citra_ios_ci_${{ github.run_number }}_${{ matrix.configuration }}_${{ github.sha }}.ipa .
+          zip -r ${{ github.workspace }}/artifacts/citra_ios_ci_${{ github.run_id }}_${{ matrix.configuration }}_${{ github.sha }}.ipa .
         env:
           DEVELOPMENT_TEAM_ID: "-"
           BUNDLE_IDENTIFIER: net.rinsuki.slapps.citra.ci-artifact
           MOLTENVK_IOS_ARTIFACT: "${{ github.workspace }}/build/dependencies/Package/Release/MoltenVK"
           CITRA_IOS_NAME_SUFFIX: " (CI)"
-          CITRA_IOS_SHORT_VERSION: ".gha.${{ github.run_number }}.${{ matrix.configuration }}.${{ github.sha }}"
+          CITRA_IOS_SHORT_VERSION: ".gha.${{ github.run_id }}.${{ matrix.configuration }}.${{ github.sha }}"
       - name: Upload
         uses: actions/upload-artifact@v3
         with:
