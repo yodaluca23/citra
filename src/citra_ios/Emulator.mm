@@ -348,8 +348,8 @@ class EmuAnalogFactory : public Input::Factory<Input::AnalogDevice> {
 }
 
 - (void)layerWasResized {
-    _emuWindow->width = _metalLayer.bounds.size.width * UIScreen.mainScreen.scale;
-    _emuWindow->height = _metalLayer.bounds.size.height * UIScreen.mainScreen.scale;
+    _emuWindow->width = _metalLayer.bounds.size.width * UIScreen.mainScreen.nativeScale;
+    _emuWindow->height = _metalLayer.bounds.size.height * UIScreen.mainScreen.nativeScale;
 }
 
 @end
