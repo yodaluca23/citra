@@ -13,7 +13,7 @@ add_executable(citra_ios
 
 create_target_directory_groups(citra_ios)
 
-target_link_libraries(citra_ios PRIVATE common core input_common network)
+target_link_libraries(citra_ios PRIVATE common core network)
 target_link_libraries(citra_ios PRIVATE inih glad)
 target_link_libraries(citra_ios PRIVATE ${PLATFORM_LIBRARIES} Threads::Threads)
 
