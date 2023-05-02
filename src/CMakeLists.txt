@@ -136,6 +136,11 @@ else()
         endif()
     endif()
 
+    if (IOS)
+        # Optimize for A12 or later chip (since already we are requiring A12 or later for GPU)
+        add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-mcpu=apple-a12>)
+    endif()
+
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR MINGW)
         # GNU ar: Create thin archive files.
         # Requires binutils-2.19 or later.
